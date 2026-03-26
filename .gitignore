@@ -1,0 +1,5 @@
+/target
+
+# Project Wiki (generated at runtime, not source)
+.wiki/
+CLAUDE.md

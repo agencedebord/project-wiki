@@ -1,0 +1,12 @@
+pub mod add;
+pub mod common;
+pub mod config;
+pub mod consult;
+pub mod graph;
+pub mod index;
+pub mod manage;
+pub mod note;
+pub mod search;
+pub mod status;
+pub mod validate;
+pub mod vectors;

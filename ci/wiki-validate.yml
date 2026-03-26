@@ -1,0 +1,24 @@
+# GitHub Actions workflow to validate project wiki on PRs
+# Copy this to .github/workflows/wiki-validate.yml in your project
+
+name: Wiki Validation
+
+on:
+  pull_request:
+    paths:
+      - '.wiki/**'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install project-wiki
+        run: cargo install project-wiki
+
+      - name: Validate wiki
+        run: project-wiki validate
+
+      - name: Check wiki status
+        run: project-wiki status

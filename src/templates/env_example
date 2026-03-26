@@ -1,0 +1,10 @@
+# Wiki environment variables
+# Copy this file to .env and fill in the values
+# This file contains sensitive data and is gitignored
+
+WIKI_CLIENT_NAME=
+WIKI_CLIENT_CONTACT=
+WIKI_CLIENT_REVENUE=
+WIKI_CLIENT_INDUSTRY=
+WIKI_NOTION_BOARD=
+WIKI_NOTION_TOKEN=

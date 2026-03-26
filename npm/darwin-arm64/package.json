@@ -1,0 +1,13 @@
+{
+  "name": "@project-wiki/darwin-arm64",
+  "version": "0.1.0",
+  "description": "project-wiki binary for macOS ARM64 (Apple Silicon)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/agencedebord/project-wiki"
+  },
+  "os": ["darwin"],
+  "cpu": ["arm64"],
+  "files": ["project-wiki"]
+}

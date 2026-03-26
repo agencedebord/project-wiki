@@ -1,0 +1,78 @@
+#!/usr/bin/env node
+
+const { execFileSync } = require("child_process");
+const path = require("path");
+const fs = require("fs");
+
+const PLATFORMS = {
+  "darwin-arm64": "@project-wiki/darwin-arm64",
+  "darwin-x64": "@project-wiki/darwin-x64",
+  "linux-x64": "@project-wiki/linux-x64",
+  "linux-arm64": "@project-wiki/linux-arm64",
+  "win32-x64": "@project-wiki/win32-x64",
+};
+
+function getBinaryPath() {
+  const platform = process.platform;
+  const arch = process.arch;
+
+  // Normalize arch names
+  let normalizedArch;
+  switch (arch) {
+    case "arm64":
+      normalizedArch = "arm64";
+      break;
+    case "x64":
+      normalizedArch = "x64";
+      break;
+    default:
+      throw new Error(`Unsupported architecture: ${arch}`);
+  }
+
+  const key = `${platform}-${normalizedArch}`;
+  const pkg = PLATFORMS[key];
+
+  if (!pkg) {
+    throw new Error(
+      `Unsupported platform: ${platform}-${normalizedArch}. ` +
+        `Supported platforms: ${Object.keys(PLATFORMS).join(", ")}`
+    );
+  }
+
+  const binaryName =
+    platform === "win32" ? "project-wiki.exe" : "project-wiki";
+
+  try {
+    const pkgPath = require.resolve(`${pkg}/package.json`);
+    const binPath = path.join(path.dirname(pkgPath), binaryName);
+
+    if (!fs.existsSync(binPath)) {
+      throw new Error(`Binary not found at ${binPath}`);
+    }
+
+    return binPath;
+  } catch (e) {
+    throw new Error(
+      `Could not find the project-wiki binary for ${platform}-${normalizedArch}. ` +
+        `Make sure ${pkg} is installed.\n\n` +
+        `If you're using npm, try reinstalling with:\n` +
+        `  npm install @project-wiki/cli\n\n` +
+        `Original error: ${e.message}`
+    );
+  }
+}
+
+try {
+  const binPath = getBinaryPath();
+  const result = execFileSync(binPath, process.argv.slice(2), {
+    stdio: "inherit",
+    env: process.env,
+  });
+} catch (e) {
+  if (e.status !== undefined) {
+    // execFileSync throws with status when the child process exits non-zero
+    process.exit(e.status);
+  }
+  console.error(e.message);
+  process.exit(1);
+}
