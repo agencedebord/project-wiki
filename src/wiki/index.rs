@@ -206,6 +206,11 @@ pub fn run() -> Result<()> {
     fs::write(&json_path, &json_output)
         .with_context(|| format!("Failed to write {}", json_path.display()))?;
 
+    // Rebuild file index cache
+    if let Err(e) = rebuild_file_index(&wiki_dir) {
+        ui::verbose(&format!("File index rebuild skipped: {}", e));
+    }
+
     ui::success(&format!(
         "Index regenerated: {} domain(s), {} note(s), {} decision(s).",
         domain_sections.len(),
@@ -213,6 +218,12 @@ pub fn run() -> Result<()> {
         decisions.len()
     ));
 
+    Ok(())
+}
+
+fn rebuild_file_index(wiki_dir: &Path) -> Result<()> {
+    let index = crate::wiki::file_index::build(wiki_dir)?;
+    crate::wiki::file_index::save(wiki_dir, &index)?;
     Ok(())
 }
 

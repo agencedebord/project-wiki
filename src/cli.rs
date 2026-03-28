@@ -1,6 +1,4 @@
-use std::path::Path;
-
-use anyhow::Result;
+use anyhow::{Result, bail};
 use clap::{Parser, Subcommand};
 
 use crate::init;
@@ -76,12 +74,6 @@ enum Commands {
     /// Regenerate the wiki index
     Index,
 
-    /// Manage vector embeddings for semantic search
-    Vectors {
-        #[command(subcommand)]
-        action: Option<VectorsCommands>,
-    },
-
     /// Set a note's confidence to confirmed
     Confirm {
         /// Domain name or path to note (e.g., "billing" or "billing/payments.md")
@@ -110,6 +102,34 @@ enum Commands {
         #[arg(long)]
         domain: Option<String>,
     },
+
+    /// Get wiki context for a file (used by Claude Code hooks)
+    Context {
+        /// File path to look up
+        #[arg(long)]
+        file: Option<String>,
+
+        /// Read hook JSON from stdin (for PreToolUse hook)
+        #[arg(long)]
+        hook: bool,
+    },
+
+    /// Detect wiki drift after a file change (used by Claude Code hooks)
+    DetectDrift {
+        /// File path to check
+        #[arg(long)]
+        file: Option<String>,
+
+        /// Read hook JSON from stdin (for PostToolUse hook)
+        #[arg(long)]
+        hook: bool,
+    },
+
+    /// Install Claude Code hooks for automatic wiki integration
+    InstallHooks,
+
+    /// Remove Claude Code hooks
+    UninstallHooks,
 }
 
 #[derive(Subcommand)]
@@ -134,19 +154,6 @@ enum AddCommands {
     Decision {
         /// Decision text
         text: String,
-    },
-}
-
-#[derive(Subcommand)]
-enum VectorsCommands {
-    /// Search wiki notes using semantic similarity (future)
-    Search {
-        /// Search query
-        query: String,
-
-        /// Number of results to return
-        #[arg(long, default_value = "5")]
-        top_k: usize,
     },
 }
 
@@ -193,25 +200,27 @@ pub async fn run() -> Result<()> {
             wiki::manage::import_folder(&folder, domain.as_deref())
         }
 
-        Commands::Vectors { action } => {
-            let wiki_dir = Path::new(".wiki");
-            match action {
-                None => wiki::vectors::index(wiki_dir),
-                Some(VectorsCommands::Search { query, top_k }) => {
-                    let results = wiki::vectors::search(wiki_dir, &query, top_k)?;
-                    if results.is_empty() {
-                        ui::coming_soon("semantic search");
-                        ui::info(
-                            "Semantic search will be available in v2.0. Use `project-wiki search` for keyword search.",
-                        );
-                    } else {
-                        for result in &results {
-                            eprintln!("  {}", result);
-                        }
-                    }
-                    Ok(())
-                }
+        Commands::Context { file, hook } => {
+            if hook {
+                wiki::context::run_from_stdin()
+            } else if let Some(f) = file {
+                wiki::context::run(&f)
+            } else {
+                bail!("Provide --file <path> or --hook")
             }
         }
+
+        Commands::DetectDrift { file, hook } => {
+            if hook {
+                wiki::drift::run_from_stdin()
+            } else if let Some(f) = file {
+                wiki::drift::run(&f)
+            } else {
+                bail!("Provide --file <path> or --hook")
+            }
+        }
+
+        Commands::InstallHooks => init::hooks::install(&std::env::current_dir()?),
+        Commands::UninstallHooks => init::hooks::uninstall(&std::env::current_dir()?),
     }
 }

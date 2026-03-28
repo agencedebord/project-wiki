@@ -91,6 +91,12 @@ pub fn run() -> Result<()> {
     ui::step("Updating .gitignore...");
     update_gitignore().context("Failed to update .gitignore")?;
 
+    // Install Claude Code hooks
+    ui::step("Installing Claude Code hooks...");
+    if let Err(e) = super::hooks::install(Path::new(".")) {
+        ui::warn(&format!("Failed to install hooks: {}", e));
+    }
+
     eprintln!();
     ui::done("Wiki initialized successfully.");
     ui::info("Run `project-wiki status` to see the wiki health.");
@@ -108,7 +114,7 @@ fn update_gitignore() -> Result<()> {
         String::new()
     };
 
-    let entries = [".wiki/.env", ".wiki/.vectors/"];
+    let entries = [".wiki/.env", ".wiki/.file-index.json"];
     let mut added = false;
 
     for entry in &entries {

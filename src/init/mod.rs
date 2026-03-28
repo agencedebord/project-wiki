@@ -1,3 +1,4 @@
+pub mod hooks;
 #[cfg(feature = "notion")]
 pub mod notion;
 pub mod patch_claude;
