@@ -10,6 +10,7 @@ pub mod graph;
 pub mod index;
 pub mod manage;
 pub mod note;
+pub mod prioritize;
 pub mod promote;
 pub mod search;
 pub mod status;

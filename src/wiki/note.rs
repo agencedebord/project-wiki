@@ -799,6 +799,122 @@ This domain handles invoicing.
         );
     }
 
+    // ── Schema stability tests (task 028) ──────────────────────────
+
+    #[test]
+    fn memory_item_forward_compat_unknown_fields_ignored() {
+        // YAML with fields added by a future version should parse without error.
+        let yaml = r#"
+id: billing-001
+type: exception
+text: Future-proof item
+confidence: confirmed
+status: active
+future_field: "some new data"
+priority: 99
+tags:
+  - hot
+  - v2
+"#;
+        let parsed: MemoryItem = serde_yml::from_str(yaml).unwrap();
+        assert_eq!(parsed.id, "billing-001");
+        assert_eq!(parsed.type_, MemoryItemType::Exception);
+        assert_eq!(parsed.text, "Future-proof item");
+        assert_eq!(parsed.confidence, Confidence::Confirmed);
+        // Unknown fields are silently ignored
+    }
+
+    #[test]
+    fn memory_item_source_forward_compat_unknown_fields_ignored() {
+        let yaml = r#"
+kind: file
+ref: src/billing/invoice.ts
+line: 42
+context: "surrounding code"
+"#;
+        let parsed: MemoryItemSource = serde_yml::from_str(yaml).unwrap();
+        assert_eq!(parsed.kind, "file");
+        assert_eq!(parsed.ref_, "src/billing/invoice.ts");
+        assert_eq!(parsed.line, Some(42));
+    }
+
+    #[test]
+    fn memory_item_backward_compat_minimal_fields() {
+        // Only the strictly required fields — no optional ones.
+        let yaml = r#"
+id: auth-001
+type: decision
+text: Use JWT for auth
+confidence: inferred
+"#;
+        let parsed: MemoryItem = serde_yml::from_str(yaml).unwrap();
+        assert_eq!(parsed.id, "auth-001");
+        assert_eq!(parsed.type_, MemoryItemType::Decision);
+        assert!(parsed.related_files.is_empty());
+        assert!(parsed.sources.is_empty());
+        assert_eq!(parsed.status, MemoryItemStatus::Active); // default
+        assert_eq!(parsed.last_reviewed, None); // default
+    }
+
+    #[test]
+    fn note_forward_compat_unknown_frontmatter_fields_ignored() {
+        // FrontMatter with fields added by a future version should parse OK.
+        let dir = TempDir::new().unwrap();
+        let content = r#"---
+title: Billing overview
+confidence: confirmed
+last_updated: "2025-06-15"
+related_files:
+  - src/billing/invoice.ts
+deprecated: false
+schema_version: "2"
+future_section:
+  key: value
+---
+# Billing
+
+Content here.
+"#;
+        let path = write_note(&dir, "billing/_overview.md", content);
+        let note = WikiNote::parse(&path).unwrap();
+        assert_eq!(note.title, "Billing overview");
+        assert_eq!(note.confidence, Confidence::Confirmed);
+    }
+
+    #[test]
+    fn json_output_schema_version_serializes_correctly() {
+        // Verify that schema_version appears as a top-level field in JSON output.
+        // The actual value "1" is tested end-to-end in cli_tests.rs.
+        use crate::wiki::check_diff::CheckDiffResult;
+        use crate::wiki::check_diff::Sensitivity;
+        use crate::wiki::context::ContextJsonOutput;
+
+        let context_output = ContextJsonOutput {
+            schema_version: "1".to_string(),
+            domain: None,
+            confidence: None,
+            last_updated: None,
+            memory_items: Vec::new(),
+            warnings: Vec::new(),
+            fallback_mode: false,
+        };
+        let json: serde_json::Value = serde_json::to_value(&context_output).unwrap();
+        assert_eq!(json["schema_version"], "1");
+        assert!(json.get("schema_version").is_some(), "schema_version must be a top-level JSON field");
+
+        let check_diff_output = CheckDiffResult {
+            schema_version: "1".to_string(),
+            files_analyzed: 0,
+            sensitivity: Sensitivity::Low,
+            domains: Vec::new(),
+            unresolved_files: Vec::new(),
+            suggested_actions: Vec::new(),
+        };
+        let json: serde_json::Value = serde_json::to_value(&check_diff_output).unwrap();
+        assert_eq!(json["schema_version"], "1");
+        assert!(json.get("schema_version").is_some(), "schema_version must be a top-level JSON field");
+    }
+
     use proptest::prelude::*;
 
     proptest! {
