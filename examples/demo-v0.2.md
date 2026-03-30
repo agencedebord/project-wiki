@@ -110,57 +110,135 @@ future documentation.
 
 ## Demo 3: "candidate -> promote -> exploitable memory"
 
-**Scenario:** The developer runs `generate-candidates` to discover undocumented
-patterns in the codebase, then promotes the best ones to confirmed memory items.
+> **Note:** The outputs below are representative of what each command produces on
+> a partially-documented codebase. They were not captured live because
+> project-wiki's own wiki is already fully documented, leaving no candidates to
+> discover. The format, structure, and behavior shown are accurate.
+
+**Scenario:** A team has just installed project-wiki on an existing SaaS
+codebase. The wiki has a single `auth` domain documented, but the codebase also
+contains billing, notifications, and onboarding logic. The developer runs
+`generate-candidates` to discover what else should be documented, then promotes
+the best findings to confirmed memory items.
 
 ### Step 1: Generate candidates
 
 ```
-$ cargo run -- generate-candidates
+$ project-wiki generate-candidates
 ```
-
-**Output:**
 
 ```
 Scanning codebase
 
   Pass 1 -- discovering project structure...
-  ██████████░░░░░░░░░░░░░░░░░░░░  33%  86 files found, 5 languages detected
-  No domain candidates found. The wiki will start empty.
-  No memory candidates detected from scan.
+  ████████████████████████████████  100%  142 files found, 3 languages detected
+
+  Domain candidates: 5 (billing, payments, notifications, onboarding, analytics)
+  Memory candidates: 8
+
+Candidates written to .wiki/_candidates.md
 ```
 
-Since the wiki already documents the 3 active domains, the scanner finds no new
-candidates to suggest. In a fresh or partially-documented project, this would
-list domain and memory candidates with IDs.
+The scanner analyzed the full codebase, detected 5 undocumented domain clusters,
+and extracted 8 memory candidates (business rules, decisions, and exceptions it
+found in code comments, config files, and structural patterns).
 
-### Step 2: Promote a candidate (hypothetical)
+### Step 2: Review candidates
+
+The developer opens `.wiki/_candidates.md` to review what was found:
+
+```markdown
+# Candidates
+
+## Domain candidates
+
+- **billing** (3 memory candidates)
+  Files: src/billing/invoice.rs, src/billing/subscription.rs, src/billing/webhook.rs
+
+- **notifications** (2 memory candidates)
+  Files: src/notifications/dispatch.rs, src/notifications/templates.rs
+
+- **onboarding** (1 memory candidate)
+  Files: src/onboarding/checklist.rs, src/onboarding/trial.rs
+
+[... 2 more domains ...]
+
+## Memory candidates
+
+- `billing-001` [decision] Invoices are generated on the 1st of each month at
+  00:00 UTC regardless of subscription start date
+  Related: src/billing/invoice.rs
+
+- `billing-002` [exception] Free-tier users still get an invoice record with
+  amount=0 to maintain audit trail continuity
+  Related: src/billing/invoice.rs, src/billing/subscription.rs
+
+- `billing-003` [business_rule] Webhook retries use exponential backoff: 1min,
+  5min, 30min, 2h, then dead-letter queue
+  Related: src/billing/webhook.rs
+
+- `notifications-001` [decision] Email dispatch is always async via job queue,
+  never inline, even for critical alerts
+  Related: src/notifications/dispatch.rs
+
+[... 4 more candidates ...]
+```
+
+Each candidate has an ID, a type (decision / exception / business_rule), a
+description inferred from the code, and the files it was found in.
+
+### Step 3: Promote a candidate
+
+The developer decides `billing-002` is a critical exception that future
+contributors must know about. They promote it:
 
 ```
-$ cargo run -- promote billing-001
+$ project-wiki promote billing-002
 ```
 
-If a candidate existed, the command would:
-1. Move the candidate from `.wiki/candidates/` to the target domain's `memory_items`
-2. Set confidence to `confirmed` (overridable with `--confidence`)
-3. Optionally reformulate the text with `--text "cleaner wording"`
+```
+✓ Created domain note .wiki/domains/billing/_overview.md
+✓ Promoted billing-002 to .wiki/domains/billing/_overview.md (confidence: confirmed)
+  [exception] Free-tier users still get an invoice record with amount=0
+              to maintain audit trail continuity
+```
+
+The command created the `billing` domain note (since it did not exist yet) and
+added the memory item with `confirmed` confidence. The candidate is removed from
+`_candidates.md`.
+
+To promote with a different confidence level or reworded text:
 
 ```
-$ cargo run -- promote --help
-
-Promote a memory candidate to a confirmed memory item
-
-Usage: project-wiki promote [OPTIONS] <CANDIDATE_ID>
-
-Arguments:
-  <CANDIDATE_ID>  Candidate ID (e.g. billing-001)
-
-Options:
-      --confidence <CONFIDENCE>  Confidence level (default: confirmed)
-      --text <TEXT>              Override candidate text with a reformulation
-  -v, --verbose...               Increase verbosity (-v, -vv, -vvv)
-  -h, --help                     Print help
+$ project-wiki promote notifications-001 --confidence seen-in-code --text "All email dispatch goes through the async job queue, never sent inline"
 ```
+
+### Step 4: Verify the promoted item is exploitable
+
+Now that the billing domain exists with a memory item, `context` surfaces it
+when a developer touches billing files:
+
+```
+$ project-wiki context --file src/billing/invoice.rs
+```
+
+```
+[project-wiki] Domain: billing (confidence: confirmed, updated: 2026-03-30)
+Memory:
+  [exception] Free-tier users still get an invoice record with amount=0
+              to maintain audit trail continuity [confirmed]
+Related files: src/billing/invoice.rs, src/billing/subscription.rs, src/billing/webhook.rs
+```
+
+**What this shows:** The full lifecycle from discovery to daily use:
+1. `generate-candidates` scans the codebase and surfaces undocumented patterns
+2. The developer reviews candidates and decides which ones matter
+3. `promote` turns a candidate into a confirmed memory item in the wiki
+4. `context` (and `check-diff`) immediately start surfacing that knowledge
+
+This is the core feedback loop: scan -> review -> promote -> exploit. Over time,
+the wiki accumulates the decisions and exceptions that are hardest to discover
+by reading code alone.
 
 ---
 
