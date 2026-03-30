@@ -173,6 +173,47 @@ pub fn reject(wiki_dir: &Path, candidate_id: &str) -> Result<()> {
     Ok(())
 }
 
+/// Find the next pending candidate to promote, sorted by type priority:
+/// exception > decision > business_rule.
+///
+/// Returns `(candidate_id, type_name)` for display purposes.
+pub fn find_next_candidate(wiki_dir: &Path) -> Result<(String, String)> {
+    ensure_wiki_exists(wiki_dir)?;
+
+    let candidates_path = wiki_dir.join("_candidates.md");
+    if !candidates_path.exists() {
+        bail!("No _candidates.md found. Run `project-wiki generate-candidates` first.");
+    }
+
+    let candidates = parse_candidates_file(&candidates_path)?;
+    let pending: Vec<&ParsedCandidate> = candidates
+        .iter()
+        .filter(|c| c.status == "pending")
+        .collect();
+
+    if pending.is_empty() {
+        bail!("No pending candidates. All candidates have been processed.");
+    }
+
+    // Sort by type priority: exception (0) > decision (1) > business_rule (2)
+    let best = pending
+        .into_iter()
+        .min_by_key(|c| type_priority(&c.type_))
+        .unwrap(); // safe: we checked non-empty above
+
+    Ok((best.id.clone(), best.type_.clone()))
+}
+
+/// Priority ordering for candidate types (lower = higher priority).
+fn type_priority(type_name: &str) -> u8 {
+    match type_name {
+        "exception" => 0,
+        "decision" => 1,
+        "business_rule" => 2,
+        _ => 3,
+    }
+}
+
 // ── Parsing ────────────────────────────────────────────────────────
 
 fn parse_candidates_file(path: &Path) -> Result<Vec<ParsedCandidate>> {
@@ -849,5 +890,156 @@ memory_items:
         assert_eq!(item.sources[0].ref_, "src/billing/legacy.ts");
         assert_eq!(item.sources[1].kind, "test");
         assert_eq!(item.sources[1].ref_, "tests/billing/legacy.test.ts");
+    }
+
+    // ── find_next_candidate tests ──────────────────────────────────
+
+    #[test]
+    fn test_find_next_candidate_returns_exception_first() {
+        let dir = TempDir::new().unwrap();
+        let wiki = setup_wiki(&dir);
+        // billing-001 is exception, billing-002 is decision
+        create_candidates_file(&wiki, &candidates_content());
+
+        let (id, type_) = find_next_candidate(&wiki).unwrap();
+        assert_eq!(id, "billing-001");
+        assert_eq!(type_, "exception");
+    }
+
+    #[test]
+    fn test_find_next_candidate_skips_non_pending() {
+        let dir = TempDir::new().unwrap();
+        let wiki = setup_wiki(&dir);
+
+        // Mark exception as confirmed, only decision is pending
+        let content = candidates_content().replace(
+            "### billing-001\n\n- **status**: pending",
+            "### billing-001\n\n- **status**: confirmed",
+        );
+        create_candidates_file(&wiki, &content);
+
+        let (id, type_) = find_next_candidate(&wiki).unwrap();
+        assert_eq!(id, "billing-002");
+        assert_eq!(type_, "decision");
+    }
+
+    #[test]
+    fn test_find_next_candidate_empty_no_candidates_file() {
+        let dir = TempDir::new().unwrap();
+        let wiki = setup_wiki(&dir);
+        // No _candidates.md
+
+        let result = find_next_candidate(&wiki);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("No _candidates.md found"));
+    }
+
+    #[test]
+    fn test_find_next_candidate_all_rejected() {
+        let dir = TempDir::new().unwrap();
+        let wiki = setup_wiki(&dir);
+
+        let content = candidates_content()
+            .replace("**status**: pending", "**status**: rejected");
+        create_candidates_file(&wiki, &content);
+
+        let result = find_next_candidate(&wiki);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("No pending candidates"));
+    }
+
+    #[test]
+    fn test_find_next_candidate_prefers_decision_over_business_rule() {
+        let dir = TempDir::new().unwrap();
+        let wiki = setup_wiki(&dir);
+
+        let content = r#"# Memory Candidates
+
+## billing
+
+### billing-001
+
+- **status**: pending
+- **type**: business_rule
+- **provenance**:
+  - file: src/billing/calc.ts
+- **target**: .wiki/domains/billing/_overview.md
+
+> Amounts stored in cents
+
+### billing-002
+
+- **status**: pending
+- **type**: decision
+- **provenance**:
+  - comment: [NOTE] We decided X
+- **target**: .wiki/domains/billing/_overview.md
+
+> Decision about X
+"#;
+        create_candidates_file(&wiki, content);
+
+        let (id, type_) = find_next_candidate(&wiki).unwrap();
+        assert_eq!(id, "billing-002");
+        assert_eq!(type_, "decision");
+    }
+
+    #[test]
+    fn test_find_next_candidate_mixed_statuses() {
+        let dir = TempDir::new().unwrap();
+        let wiki = setup_wiki(&dir);
+
+        let content = r#"# Memory Candidates
+
+## billing
+
+### billing-001
+
+- **status**: confirmed
+- **type**: exception
+- **provenance**:
+  - file: src/billing/legacy.ts
+- **target**: .wiki/domains/billing/_overview.md
+
+> Already confirmed exception
+
+### billing-002
+
+- **status**: rejected
+- **type**: decision
+- **provenance**:
+  - comment: [NOTE] Rejected
+- **target**: .wiki/domains/billing/_overview.md
+
+> Rejected decision
+
+### billing-003
+
+- **status**: pending
+- **type**: business_rule
+- **provenance**:
+  - file: src/billing/calc.ts
+- **target**: .wiki/domains/billing/_overview.md
+
+> Only pending candidate
+"#;
+        create_candidates_file(&wiki, content);
+
+        let (id, type_) = find_next_candidate(&wiki).unwrap();
+        assert_eq!(id, "billing-003");
+        assert_eq!(type_, "business_rule");
+    }
+
+    #[test]
+    fn test_type_priority_ordering() {
+        assert!(type_priority("exception") < type_priority("decision"));
+        assert!(type_priority("decision") < type_priority("business_rule"));
+        assert!(type_priority("business_rule") < type_priority("unknown_type"));
     }
 }

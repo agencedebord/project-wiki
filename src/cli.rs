@@ -176,7 +176,11 @@ enum Commands {
     /// Promote a memory candidate to a confirmed memory item
     Promote {
         /// Candidate ID (e.g. billing-001)
-        candidate_id: String,
+        candidate_id: Option<String>,
+
+        /// Auto-promote the highest-priority pending candidate
+        #[arg(long)]
+        next: bool,
 
         /// Confidence level (default: confirmed)
         #[arg(long)]
@@ -303,14 +307,30 @@ pub async fn run() -> Result<()> {
 
         Commands::Promote {
             candidate_id,
+            next,
             confidence,
             text,
-        } => wiki::promote::promote(
-            std::path::Path::new(".wiki"),
-            &candidate_id,
-            confidence.as_deref(),
-            text.as_deref(),
-        ),
+        } => {
+            let wiki_dir = std::path::Path::new(".wiki");
+            let id = if next {
+                let found = wiki::promote::find_next_candidate(wiki_dir)?;
+                ui::info(&format!(
+                    "Auto-selected: {} [{}]",
+                    found.0, found.1
+                ));
+                found.0
+            } else if let Some(id) = candidate_id {
+                id
+            } else {
+                bail!("Provide a candidate ID or use --next to auto-select the highest-priority pending candidate.")
+            };
+            wiki::promote::promote(
+                wiki_dir,
+                &id,
+                confidence.as_deref(),
+                text.as_deref(),
+            )
+        }
 
         Commands::Reject { candidate_id } => {
             wiki::promote::reject(std::path::Path::new(".wiki"), &candidate_id)
@@ -331,6 +351,14 @@ pub async fn run() -> Result<()> {
                     "{} memory candidate(s) written to .wiki/_candidates.md",
                     candidates.len()
                 ));
+                eprintln!();
+                eprintln!("Candidates:");
+                for c in &candidates {
+                    eprintln!("  {} [{}]  \"{}\"", c.id, c.type_, c.text);
+                }
+                eprintln!();
+                eprintln!("Next: project-wiki promote <id>");
+                eprintln!("  or: project-wiki promote --next");
             }
             Ok(())
         }
