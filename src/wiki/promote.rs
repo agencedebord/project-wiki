@@ -225,8 +225,9 @@ fn parse_candidates_file(path: &Path) -> Result<Vec<ParsedCandidate>> {
                 in_provenance = false;
             } else if line.contains("**provenance**:") {
                 in_provenance = true;
-            } else if in_provenance && line.trim().starts_with("- ") {
-                let entry = line.trim().strip_prefix("- ").unwrap_or("");
+            } else if in_provenance && line.starts_with("  - ") {
+                // Provenance entries are indented ("  - kind: ref").
+                let entry = line.strip_prefix("  - ").unwrap_or("");
                 if let Some((kind, ref_)) = entry.split_once(": ") {
                     c.provenance
                         .push((kind.trim().to_string(), ref_.trim().to_string()));
@@ -236,7 +237,8 @@ fn parse_candidates_file(path: &Path) -> Result<Vec<ParsedCandidate>> {
                     c.text = quoted.trim().to_string();
                 }
                 in_provenance = false;
-            } else if !line.trim().starts_with("- ") || !in_provenance {
+            } else {
+                // Any non-provenance line resets the provenance block
                 in_provenance = false;
             }
         }
@@ -657,5 +659,195 @@ memory_items:
         assert!(!candidates[0].provenance.is_empty());
         assert_eq!(candidates[1].id, "billing-002");
         assert_eq!(candidates[1].type_, "decision");
+    }
+
+    #[test]
+    fn test_promote_invalid_confidence_override() {
+        let dir = TempDir::new().unwrap();
+        let wiki = setup_wiki(&dir);
+        create_candidates_file(&wiki, &candidates_content());
+        create_note(&wiki, "billing", &note_content());
+
+        let result = promote(&wiki, "billing-001", Some("bogus"), None);
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("Unknown confidence level: 'bogus'")
+        );
+    }
+
+    #[test]
+    fn test_promote_no_candidates_file() {
+        let dir = TempDir::new().unwrap();
+        let wiki = setup_wiki(&dir);
+        // No _candidates.md created
+
+        let result = promote(&wiki, "billing-001", None, None);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("No _candidates.md found"));
+    }
+
+    #[test]
+    fn test_promote_target_note_not_found() {
+        let dir = TempDir::new().unwrap();
+        let wiki = setup_wiki(&dir);
+
+        // Candidate points to a note that doesn't exist
+        let content = r#"# Memory Candidates
+
+### billing-001
+
+- **status**: pending
+- **type**: exception
+- **provenance**:
+  - file: src/billing/legacy.ts
+- **target**: .wiki/domains/nonexistent/_overview.md
+
+> Some text
+"#;
+        create_candidates_file(&wiki, content);
+
+        let result = promote(&wiki, "billing-001", None, None);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Target note"));
+    }
+
+    #[test]
+    fn test_promote_two_candidates_sequentially() {
+        let dir = TempDir::new().unwrap();
+        let wiki = setup_wiki(&dir);
+        create_candidates_file(&wiki, &candidates_content());
+        create_note(&wiki, "billing", &note_content());
+
+        promote(&wiki, "billing-001", None, None).unwrap();
+        promote(&wiki, "billing-002", None, None).unwrap();
+
+        let note = WikiNote::parse(&wiki.join("domains/billing/_overview.md")).unwrap();
+        assert_eq!(note.memory_items.len(), 2);
+        assert!(note.memory_items.iter().any(|i| i.id == "billing-001"));
+        assert!(note.memory_items.iter().any(|i| i.id == "billing-002"));
+
+        // Both should be confirmed in _candidates.md
+        let content = fs::read_to_string(wiki.join("_candidates.md")).unwrap();
+        assert!(!content.contains("**status**: pending"));
+    }
+
+    #[test]
+    fn test_promote_updates_only_target_candidate_status() {
+        let dir = TempDir::new().unwrap();
+        let wiki = setup_wiki(&dir);
+        create_candidates_file(&wiki, &candidates_content());
+        create_note(&wiki, "billing", &note_content());
+
+        promote(&wiki, "billing-001", None, None).unwrap();
+
+        let content = fs::read_to_string(wiki.join("_candidates.md")).unwrap();
+        // billing-001 should be confirmed, billing-002 should still be pending
+        let sections: Vec<&str> = content.split("### ").collect();
+        let billing_001 = sections.iter().find(|s| s.starts_with("billing-001")).unwrap();
+        let billing_002 = sections.iter().find(|s| s.starts_with("billing-002")).unwrap();
+        assert!(billing_001.contains("**status**: confirmed"));
+        assert!(billing_002.contains("**status**: pending"));
+    }
+
+    #[test]
+    fn test_reject_candidate_not_found() {
+        let dir = TempDir::new().unwrap();
+        let wiki = setup_wiki(&dir);
+        create_candidates_file(&wiki, &candidates_content());
+
+        let result = reject(&wiki, "billing-999");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("No candidate found with id 'billing-999'"));
+    }
+
+    #[test]
+    fn test_reject_no_candidates_file() {
+        let dir = TempDir::new().unwrap();
+        let wiki = setup_wiki(&dir);
+
+        let result = reject(&wiki, "billing-001");
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("No _candidates.md found"));
+    }
+
+    #[test]
+    fn test_reject_already_processed() {
+        let dir = TempDir::new().unwrap();
+        let wiki = setup_wiki(&dir);
+
+        let content = candidates_content().replace(
+            "### billing-001\n\n- **status**: pending",
+            "### billing-001\n\n- **status**: rejected",
+        );
+        create_candidates_file(&wiki, &content);
+
+        // Should not error, just warn and return Ok
+        reject(&wiki, "billing-001").unwrap();
+    }
+
+    #[test]
+    fn test_parse_confidence_all_values() {
+        assert_eq!(parse_confidence("confirmed").unwrap(), Confidence::Confirmed);
+        assert_eq!(parse_confidence("verified").unwrap(), Confidence::Verified);
+        assert_eq!(
+            parse_confidence("seen-in-code").unwrap(),
+            Confidence::SeenInCode
+        );
+        assert_eq!(parse_confidence("inferred").unwrap(), Confidence::Inferred);
+        assert_eq!(
+            parse_confidence("needs-validation").unwrap(),
+            Confidence::NeedsValidation
+        );
+        assert!(parse_confidence("unknown").is_err());
+    }
+
+    #[test]
+    fn test_parse_item_type_all_values() {
+        assert_eq!(
+            parse_item_type("exception").unwrap(),
+            MemoryItemType::Exception
+        );
+        assert_eq!(
+            parse_item_type("decision").unwrap(),
+            MemoryItemType::Decision
+        );
+        assert_eq!(
+            parse_item_type("business_rule").unwrap(),
+            MemoryItemType::BusinessRule
+        );
+        assert!(parse_item_type("unknown").is_err());
+    }
+
+    #[test]
+    fn test_promote_sources_transferred_from_provenance() {
+        let dir = TempDir::new().unwrap();
+        let wiki = setup_wiki(&dir);
+        create_candidates_file(&wiki, &candidates_content());
+        create_note(&wiki, "billing", &note_content());
+
+        promote(&wiki, "billing-001", None, None).unwrap();
+
+        let note = WikiNote::parse(&wiki.join("domains/billing/_overview.md")).unwrap();
+        let item = &note.memory_items[0];
+        assert_eq!(item.sources.len(), 2);
+        assert_eq!(item.sources[0].kind, "file");
+        assert_eq!(item.sources[0].ref_, "src/billing/legacy.ts");
+        assert_eq!(item.sources[1].kind, "test");
+        assert_eq!(item.sources[1].ref_, "tests/billing/legacy.test.ts");
     }
 }
