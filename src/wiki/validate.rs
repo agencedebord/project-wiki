@@ -468,6 +468,7 @@ mod tests {
             deprecated,
             title: "Test".to_string(),
             content: String::new(),
+            memory_items: Vec::new(),
         }
     }
 

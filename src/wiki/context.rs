@@ -250,6 +250,7 @@ mod tests {
             deprecated: false,
             title: format!("{} overview", domain),
             content: content.to_string(),
+            memory_items: Vec::new(),
         }
     }
 
