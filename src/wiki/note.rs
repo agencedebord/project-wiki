@@ -801,6 +801,9 @@ This domain handles invoicing.
 
     // ── Schema stability tests (task 028) ──────────────────────────
 
+    // NOTE: json_output_schema_version_serializes_correctly was moved to
+    // check_diff/tests.rs and context/tests.rs (task 028 decoupling).
+
     #[test]
     fn memory_item_forward_compat_unknown_fields_ignored() {
         // YAML with fields added by a future version should parse without error.
@@ -879,40 +882,6 @@ Content here.
         let note = WikiNote::parse(&path).unwrap();
         assert_eq!(note.title, "Billing overview");
         assert_eq!(note.confidence, Confidence::Confirmed);
-    }
-
-    #[test]
-    fn json_output_schema_version_serializes_correctly() {
-        // Verify that schema_version appears as a top-level field in JSON output.
-        // The actual value "1" is tested end-to-end in cli_tests.rs.
-        use crate::wiki::check_diff::CheckDiffResult;
-        use crate::wiki::check_diff::Sensitivity;
-        use crate::wiki::context::ContextJsonOutput;
-
-        let context_output = ContextJsonOutput {
-            schema_version: "1".to_string(),
-            domain: None,
-            confidence: None,
-            last_updated: None,
-            memory_items: Vec::new(),
-            warnings: Vec::new(),
-            fallback_mode: false,
-        };
-        let json: serde_json::Value = serde_json::to_value(&context_output).unwrap();
-        assert_eq!(json["schema_version"], "1");
-        assert!(json.get("schema_version").is_some(), "schema_version must be a top-level JSON field");
-
-        let check_diff_output = CheckDiffResult {
-            schema_version: "1".to_string(),
-            files_analyzed: 0,
-            sensitivity: Sensitivity::Low,
-            domains: Vec::new(),
-            unresolved_files: Vec::new(),
-            suggested_actions: Vec::new(),
-        };
-        let json: serde_json::Value = serde_json::to_value(&check_diff_output).unwrap();
-        assert_eq!(json["schema_version"], "1");
-        assert!(json.get("schema_version").is_some(), "schema_version must be a top-level JSON field");
     }
 
     use proptest::prelude::*;
