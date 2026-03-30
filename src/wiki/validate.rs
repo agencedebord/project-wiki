@@ -10,7 +10,7 @@ use crate::ui;
 use crate::wiki::common;
 use crate::wiki::common::{DOMAIN_PARENT_DIRS, LINK_RE};
 use crate::wiki::config;
-use crate::wiki::note::{Confidence, WikiNote};
+use crate::wiki::note::{Confidence, MemoryItemStatus, WikiNote};
 
 pub fn run() -> Result<()> {
     let wiki_dir = common::find_wiki_root()?;
@@ -132,6 +132,32 @@ pub fn run() -> Result<()> {
             ui::warn(&format!("{} is not referenced in _index.md", path));
         }
         warnings += orphans.len();
+    }
+
+    // ─── 8. Memory items ───
+    ui::header("Memory items");
+    let (mi_errors, mi_warnings) = check_memory_items(&notes);
+    if mi_errors.is_empty() && mi_warnings.is_empty() {
+        let total_items: usize = notes.iter().map(|n| n.memory_items.len()).sum();
+        if total_items > 0 {
+            ui::resolved(&format!(
+                "{} memory item(s) across {} note(s) — all valid.",
+                total_items,
+                notes.iter().filter(|n| !n.memory_items.is_empty()).count()
+            ));
+        } else {
+            ui::resolved("No memory items to validate.");
+        }
+        passes += 1;
+    } else {
+        for err in &mi_errors {
+            ui::unresolved(err);
+        }
+        for warn in &mi_warnings {
+            ui::warn(warn);
+        }
+        errors += mi_errors.len();
+        warnings += mi_warnings.len();
     }
 
     // ─── Summary ───
@@ -445,6 +471,99 @@ fn check_orphan_notes() -> Result<Vec<String>> {
     Ok(orphans)
 }
 
+/// Check 8: Validate memory_items for structural integrity across all notes
+fn check_memory_items(notes: &[WikiNote]) -> (Vec<String>, Vec<String>) {
+    let mut errors: Vec<String> = Vec::new();
+    let mut warnings: Vec<String> = Vec::new();
+    let mut all_ids: HashMap<String, String> = HashMap::new(); // id -> first note path
+    let today = Utc::now().date_naive();
+
+    for note in notes {
+        let mut note_ids: HashSet<String> = HashSet::new();
+
+        for item in &note.memory_items {
+            // ── Duplicate id within same note ──
+            if !note_ids.insert(item.id.clone()) {
+                errors.push(format!("{}: duplicate item id '{}'", note.path, item.id));
+            }
+
+            // ── Duplicate id across notes ──
+            if let Some(existing_path) = all_ids.get(&item.id) {
+                if existing_path != &note.path {
+                    errors.push(format!(
+                        "{}: item id '{}' already used in {}",
+                        note.path, item.id, existing_path
+                    ));
+                }
+            } else {
+                all_ids.insert(item.id.clone(), note.path.clone());
+            }
+
+            // ── Source validation ──
+            for (i, source) in item.sources.iter().enumerate() {
+                if source.kind.is_empty() {
+                    errors.push(format!(
+                        "{}: item '{}' source #{} has empty kind",
+                        note.path,
+                        item.id,
+                        i + 1
+                    ));
+                }
+                if source.ref_.is_empty() {
+                    errors.push(format!(
+                        "{}: item '{}' source #{} has empty ref",
+                        note.path,
+                        item.id,
+                        i + 1
+                    ));
+                }
+            }
+
+            // ── Confidence inconsistency ──
+            if item.is_high_confidence()
+                && matches!(
+                    note.confidence,
+                    Confidence::Inferred | Confidence::NeedsValidation
+                )
+            {
+                warnings.push(format!(
+                    "{}: item '{}' is {} but note is {}",
+                    note.path, item.id, item.confidence, note.confidence
+                ));
+            }
+
+            // ── Future date ──
+            if let Some(date) = item.last_reviewed_date() {
+                if date > today {
+                    warnings.push(format!(
+                        "{}: item '{}' has last_reviewed in the future ({})",
+                        note.path, item.id, date
+                    ));
+                }
+            }
+
+            // ── No sources ──
+            if item.sources.is_empty() {
+                warnings.push(format!("{}: item '{}' has no sources", note.path, item.id));
+            }
+
+            // ── Deprecated item is the only active one ──
+            if matches!(item.status, MemoryItemStatus::Deprecated) {
+                let active_count = note
+                    .memory_items
+                    .iter()
+                    .filter(|i| matches!(i.status, MemoryItemStatus::Active))
+                    .count();
+                if active_count == 0 {
+                    warnings.push(format!("{}: all memory items are deprecated", note.path));
+                }
+            }
+        }
+    }
+
+    (errors, warnings)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -682,5 +801,304 @@ mod tests {
 
         let refs = check_deprecated_references(&notes, &md_files).unwrap();
         assert!(refs.is_empty());
+    }
+
+    // ─── check_memory_items ───
+
+    use crate::wiki::note::{MemoryItem, MemoryItemSource, MemoryItemStatus, MemoryItemType};
+
+    fn make_item(id: &str, type_: MemoryItemType, confidence: Confidence) -> MemoryItem {
+        MemoryItem {
+            id: id.to_string(),
+            type_,
+            text: "Test item".to_string(),
+            confidence,
+            related_files: Vec::new(),
+            sources: vec![MemoryItemSource {
+                kind: "file".to_string(),
+                ref_: "src/test.ts".to_string(),
+                line: None,
+            }],
+            status: MemoryItemStatus::Active,
+            last_reviewed: None,
+        }
+    }
+
+    fn make_note_with_items(
+        path: &str,
+        confidence: Confidence,
+        items: Vec<MemoryItem>,
+    ) -> WikiNote {
+        WikiNote {
+            path: path.to_string(),
+            domain: "test".to_string(),
+            confidence,
+            last_updated: None,
+            related_files: Vec::new(),
+            deprecated: false,
+            title: "Test".to_string(),
+            content: String::new(),
+            memory_items: items,
+        }
+    }
+
+    #[test]
+    fn validate_duplicate_id_same_note() {
+        let notes = vec![make_note_with_items(
+            "billing.md",
+            Confidence::Confirmed,
+            vec![
+                make_item(
+                    "billing-001",
+                    MemoryItemType::Decision,
+                    Confidence::Confirmed,
+                ),
+                make_item(
+                    "billing-001",
+                    MemoryItemType::Exception,
+                    Confidence::Confirmed,
+                ),
+            ],
+        )];
+
+        let (errors, _) = check_memory_items(&notes);
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("duplicate item id 'billing-001'")),
+            "Expected duplicate id error, got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn validate_duplicate_id_across_notes() {
+        let notes = vec![
+            make_note_with_items(
+                "billing.md",
+                Confidence::Confirmed,
+                vec![make_item(
+                    "shared-001",
+                    MemoryItemType::Decision,
+                    Confidence::Confirmed,
+                )],
+            ),
+            make_note_with_items(
+                "auth.md",
+                Confidence::Confirmed,
+                vec![make_item(
+                    "shared-001",
+                    MemoryItemType::Exception,
+                    Confidence::Confirmed,
+                )],
+            ),
+        ];
+
+        let (errors, _) = check_memory_items(&notes);
+        assert!(
+            errors
+                .iter()
+                .any(|e| e.contains("shared-001") && e.contains("already used")),
+            "Expected cross-note duplicate error, got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn validate_source_empty_kind() {
+        let mut item = make_item(
+            "billing-001",
+            MemoryItemType::Decision,
+            Confidence::Confirmed,
+        );
+        item.sources = vec![MemoryItemSource {
+            kind: String::new(),
+            ref_: "src/test.ts".to_string(),
+            line: None,
+        }];
+
+        let notes = vec![make_note_with_items(
+            "billing.md",
+            Confidence::Confirmed,
+            vec![item],
+        )];
+        let (errors, _) = check_memory_items(&notes);
+        assert!(
+            errors.iter().any(|e| e.contains("empty kind")),
+            "Expected empty kind error, got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn validate_source_empty_ref() {
+        let mut item = make_item(
+            "billing-001",
+            MemoryItemType::Decision,
+            Confidence::Confirmed,
+        );
+        item.sources = vec![MemoryItemSource {
+            kind: "file".to_string(),
+            ref_: String::new(),
+            line: None,
+        }];
+
+        let notes = vec![make_note_with_items(
+            "billing.md",
+            Confidence::Confirmed,
+            vec![item],
+        )];
+        let (errors, _) = check_memory_items(&notes);
+        assert!(
+            errors.iter().any(|e| e.contains("empty ref")),
+            "Expected empty ref error, got: {:?}",
+            errors
+        );
+    }
+
+    #[test]
+    fn validate_confidence_inconsistency_warning() {
+        let notes = vec![make_note_with_items(
+            "billing.md",
+            Confidence::Inferred,
+            vec![make_item(
+                "billing-001",
+                MemoryItemType::Decision,
+                Confidence::Confirmed,
+            )],
+        )];
+
+        let (_, warnings) = check_memory_items(&notes);
+        assert!(
+            warnings
+                .iter()
+                .any(|w| w.contains("confirmed") && w.contains("inferred")),
+            "Expected confidence inconsistency warning, got: {:?}",
+            warnings
+        );
+    }
+
+    #[test]
+    fn validate_future_date_warning() {
+        let mut item = make_item(
+            "billing-001",
+            MemoryItemType::Decision,
+            Confidence::Confirmed,
+        );
+        item.last_reviewed = Some("2030-01-01".to_string());
+
+        let notes = vec![make_note_with_items(
+            "billing.md",
+            Confidence::Confirmed,
+            vec![item],
+        )];
+        let (_, warnings) = check_memory_items(&notes);
+        assert!(
+            warnings.iter().any(|w| w.contains("future")),
+            "Expected future date warning, got: {:?}",
+            warnings
+        );
+    }
+
+    #[test]
+    fn validate_item_without_sources_warning() {
+        let mut item = make_item(
+            "billing-001",
+            MemoryItemType::Decision,
+            Confidence::Confirmed,
+        );
+        item.sources = Vec::new();
+
+        let notes = vec![make_note_with_items(
+            "billing.md",
+            Confidence::Confirmed,
+            vec![item],
+        )];
+        let (_, warnings) = check_memory_items(&notes);
+        assert!(
+            warnings.iter().any(|w| w.contains("no sources")),
+            "Expected no sources warning, got: {:?}",
+            warnings
+        );
+    }
+
+    #[test]
+    fn validate_all_deprecated_items_warning() {
+        let mut item = make_item(
+            "billing-001",
+            MemoryItemType::Decision,
+            Confidence::Confirmed,
+        );
+        item.status = MemoryItemStatus::Deprecated;
+
+        let notes = vec![make_note_with_items(
+            "billing.md",
+            Confidence::Confirmed,
+            vec![item],
+        )];
+        let (_, warnings) = check_memory_items(&notes);
+        assert!(
+            warnings
+                .iter()
+                .any(|w| w.contains("all memory items are deprecated")),
+            "Expected all-deprecated warning, got: {:?}",
+            warnings
+        );
+    }
+
+    #[test]
+    fn validate_notes_without_items_pass() {
+        let notes = vec![
+            make_note("a.md", Confidence::Confirmed, None, vec![], false),
+            make_note("b.md", Confidence::Inferred, None, vec![], false),
+        ];
+
+        let (errors, warnings) = check_memory_items(&notes);
+        assert!(errors.is_empty());
+        assert!(warnings.is_empty());
+    }
+
+    #[test]
+    fn validate_valid_memory_items_pass() {
+        let notes = vec![make_note_with_items(
+            "billing.md",
+            Confidence::Confirmed,
+            vec![
+                make_item(
+                    "billing-001",
+                    MemoryItemType::Exception,
+                    Confidence::Confirmed,
+                ),
+                make_item(
+                    "billing-002",
+                    MemoryItemType::Decision,
+                    Confidence::Verified,
+                ),
+            ],
+        )];
+
+        let (errors, warnings) = check_memory_items(&notes);
+        assert!(errors.is_empty(), "Unexpected errors: {:?}", errors);
+        assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+    }
+
+    #[test]
+    fn validate_mixed_notes_with_and_without_items() {
+        let notes = vec![
+            make_note("a.md", Confidence::Confirmed, None, vec![], false),
+            make_note_with_items(
+                "b.md",
+                Confidence::Confirmed,
+                vec![make_item(
+                    "b-001",
+                    MemoryItemType::BusinessRule,
+                    Confidence::Confirmed,
+                )],
+            ),
+        ];
+
+        let (errors, warnings) = check_memory_items(&notes);
+        assert!(errors.is_empty());
+        assert!(warnings.is_empty());
     }
 }
