@@ -25,7 +25,7 @@ These memory items are surfaced at two critical moments:
 | **Before editing** | `context --file src/billing/invoice.ts` | Surfaces relevant memory items so you (or your AI) know what to preserve |
 | **After a diff** | `check-diff` | Flags exceptions and decisions that affect the modified files |
 
-Both commands integrate with Claude Code hooks so they run automatically.
+`context` runs automatically via a Claude Code hook before file edits. `check-diff` is run manually or in CI.
 
 ## Quick start
 
@@ -42,7 +42,7 @@ project-wiki init --full    # scans codebase, installs hooks, patches CLAUDE.md
 project-wiki status
 ```
 
-`init --full` does three things: scans your codebase to bootstrap domain notes, installs Claude Code hooks, and patches `.claude/CLAUDE.md` with wiki instructions. Each step is also available separately (`--scan`, `--hooks`).
+`init --full` does three things: scans your codebase to bootstrap domain notes, installs Claude Code hooks, and patches `CLAUDE.md` (at project root) with wiki instructions. Each step is also available separately (`--scan`, `--hooks`).
 
 ## Memory items
 
@@ -199,7 +199,7 @@ Hooks
 1. **PreToolUse** (`context --hook`): before file edits, injects relevant memory items into the AI's context
 2. **PostToolUse** (`detect-drift --hook`): after a file write, flags potential wiki drift
 
-It also patches `.claude/CLAUDE.md` with instructions to read and respect the wiki.
+It also patches `CLAUDE.md` (at project root) with instructions to read and respect the wiki.
 
 ## Configuration
 
