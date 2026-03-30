@@ -526,7 +526,7 @@ fn snapshot_fallback_format_without_memory_items() {
 ## Business rules\n- Max 5 failed login attempts\n\
 ## Dependencies\n- user-service\n- redis\n",
     );
-    let summary = compact_summary(&note, "auth", "src/auth/login.ts");
+    let summary = compact_summary(&note, "auth", "src/auth/main.ts");
 
     let expected = "\
 [project-wiki] Domain: auth (confidence: confirmed, updated: 2026-03-28)
