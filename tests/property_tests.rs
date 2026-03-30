@@ -22,7 +22,7 @@ mod property_tests {
             let _ = Command::cargo_bin("project-wiki")
                 .unwrap()
                 .current_dir(&sub)
-                .args(["init", "--no-scan"])
+                .arg("init")
                 .output();
         }
     }
@@ -35,7 +35,7 @@ mod property_tests {
             Command::cargo_bin("project-wiki")
                 .unwrap()
                 .current_dir(dir.path())
-                .args(["init", "--no-scan"])
+                .arg("init")
                 .assert()
                 .success();
 
@@ -55,7 +55,7 @@ mod property_tests {
             Command::cargo_bin("project-wiki")
                 .unwrap()
                 .current_dir(dir.path())
-                .args(["init", "--no-scan"])
+                .arg("init")
                 .assert()
                 .success();
 
@@ -75,7 +75,7 @@ mod property_tests {
             Command::cargo_bin("project-wiki")
                 .unwrap()
                 .current_dir(dir.path())
-                .args(["init", "--no-scan"])
+                .arg("init")
                 .assert()
                 .success();
 

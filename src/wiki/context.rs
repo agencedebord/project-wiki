@@ -28,13 +28,45 @@ struct HookOutput {
 
 // ─── Public API ───
 
+/// JSON output for `context --json`.
+#[derive(Debug, Serialize)]
+pub struct ContextJsonOutput {
+    pub schema_version: String,
+    pub domain: Option<String>,
+    pub confidence: Option<String>,
+    pub last_updated: Option<String>,
+    pub memory_items: Vec<ContextJsonItem>,
+    pub warnings: Vec<String>,
+    pub fallback_mode: bool,
+}
+
+/// JSON representation of a memory item in context output.
+#[derive(Debug, Serialize)]
+pub struct ContextJsonItem {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub type_: String,
+    pub text: String,
+    pub confidence: String,
+}
+
 /// CLI entry point: print context for a file to stdout.
-pub fn run(file: &str) -> Result<()> {
+pub fn run(file: &str, json: bool) -> Result<()> {
     let wiki_dir = find_wiki_root()?;
 
     let project_root = wiki_dir
         .parent()
         .ok_or_else(|| anyhow::anyhow!("Wiki directory has no parent"))?;
+
+    if json {
+        let output = resolve_context_json(file, &wiki_dir, project_root)?;
+        println!(
+            "{}",
+            serde_json::to_string_pretty(&output)
+                .map_err(|e| anyhow::anyhow!("JSON serialization: {e}"))?
+        );
+        return Ok(());
+    }
 
     match resolve_context(file, &wiki_dir, project_root)? {
         Some(ctx) => {
@@ -46,6 +78,88 @@ pub fn run(file: &str) -> Result<()> {
             Ok(())
         }
     }
+}
+
+/// Resolve context as structured JSON for a file.
+fn resolve_context_json(
+    file_path: &str,
+    wiki_dir: &Path,
+    project_root: &Path,
+) -> Result<ContextJsonOutput> {
+    ensure_wiki_exists(wiki_dir)?;
+
+    let index = file_index::load_or_rebuild(wiki_dir)?;
+
+    let domain = file_index::resolve_domain(&index, file_path, project_root);
+
+    if domain.is_none() {
+        return Ok(ContextJsonOutput {
+            schema_version: "1".to_string(),
+            domain: None,
+            confidence: None,
+            last_updated: None,
+            memory_items: Vec::new(),
+            warnings: vec!["No domain found for this file".to_string()],
+            fallback_mode: false,
+        });
+    }
+
+    let domain = domain.unwrap();
+    let overview_path = wiki_dir.join("domains").join(&domain).join("_overview.md");
+
+    if !overview_path.exists() {
+        return Ok(ContextJsonOutput {
+            schema_version: "1".to_string(),
+            domain: Some(domain),
+            confidence: None,
+            last_updated: None,
+            memory_items: Vec::new(),
+            warnings: vec!["Domain overview not found".to_string()],
+            fallback_mode: false,
+        });
+    }
+
+    let note = WikiNote::parse(&overview_path)?;
+    let fallback_mode = note.memory_items.is_empty();
+
+    let prioritized = prioritize_memory_items(&note.memory_items, file_path, MAX_MEMORY_ITEMS);
+    let items: Vec<ContextJsonItem> = prioritized
+        .into_iter()
+        .map(|item| ContextJsonItem {
+            id: item.id.clone(),
+            type_: item.type_.to_string(),
+            text: item.text.clone(),
+            confidence: item.confidence.to_string(),
+        })
+        .collect();
+
+    let mut warnings = Vec::new();
+    let low_confidence_items: Vec<&MemoryItem> = note
+        .memory_items
+        .iter()
+        .filter(|i| {
+            matches!(
+                i.confidence,
+                Confidence::Inferred | Confidence::NeedsValidation
+            )
+        })
+        .collect();
+    if !low_confidence_items.is_empty() {
+        warnings.push(format!(
+            "{} item(s) have low confidence — verify before relying on them",
+            low_confidence_items.len()
+        ));
+    }
+
+    Ok(ContextJsonOutput {
+        schema_version: "1".to_string(),
+        domain: Some(domain),
+        confidence: Some(note.confidence.to_string()),
+        last_updated: note.last_updated.map(|d| d.to_string()),
+        memory_items: items,
+        warnings,
+        fallback_mode,
+    })
 }
 
 /// Hook entry point: read JSON from stdin, write JSON to stdout.

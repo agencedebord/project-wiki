@@ -1,3 +1,4 @@
+pub mod candidates;
 pub mod hooks;
 #[cfg(feature = "notion")]
 pub mod notion;
@@ -12,71 +13,35 @@ use anyhow::{Context, Result};
 
 use crate::ui;
 
-pub async fn run(no_scan: bool, from_notion: Option<String>, resume: bool) -> Result<()> {
+pub async fn run(
+    scan: bool,
+    hooks: bool,
+    full: bool,
+    from_notion: Option<String>,
+    resume: bool,
+) -> Result<()> {
+    // --full enables all opt-in steps
+    let do_scan = scan || full || from_notion.is_some();
+    let do_hooks = hooks || full;
+    let do_claude_integration = full;
+
     if !resume {
         scaffold::run()?;
     }
 
-    if !no_scan {
-        let result = scan::run()?;
+    if do_scan {
+        run_scan()?;
+    }
 
-        if result.domains.is_empty() {
-            ui::info(
-                "No domains detected. You can add them manually with `project-wiki add domain <name>`.",
-            );
-            if from_notion.is_none() {
-                return Ok(());
-            }
-        } else {
-            let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
-
-            // Create domain directories and write _overview.md for each domain
-            ui::step("Writing domain overviews...");
-            for domain in &result.domains {
-                let domain_dir = Path::new(".wiki/domains").join(&domain.name);
-                fs::create_dir_all(&domain_dir).with_context(|| {
-                    format!(
-                        "Failed to create domain directory: {}",
-                        domain_dir.display()
-                    )
-                })?;
-
-                let overview_content = scan::generate_domain_overview(domain, &result.domains);
-                let overview_path = domain_dir.join("_overview.md");
-                fs::write(&overview_path, &overview_content)
-                    .with_context(|| format!("Failed to write {}", overview_path.display()))?;
-            }
-
-            // Generate _graph.md
-            ui::step("Generating dependency graph...");
-            let graph_content = scan::generate_graph(&result.domains);
-            fs::write(".wiki/_graph.md", &graph_content).context("Failed to write _graph.md")?;
-
-            // Generate _index.md
-            ui::step("Generating wiki index...");
-            let index_content = scan::generate_index(&result.domains, &date);
-            fs::write(".wiki/_index.md", &index_content).context("Failed to write _index.md")?;
-
-            // Generate _needs-review.md
-            ui::step("Writing needs-review with collected TODOs...");
-            let needs_review_content = scan::generate_needs_review(&result.domains);
-            fs::write(".wiki/_needs-review.md", &needs_review_content)
-                .context("Failed to write _needs-review.md")?;
-
-            eprintln!();
-            ui::success(&format!(
-                "Populated wiki with {} domain(s), {} files scanned.",
-                result.domains.len(),
-                result.total_files_scanned,
-            ));
-
-            if !result.languages_detected.is_empty() {
-                ui::info(&format!(
-                    "Languages: {}",
-                    result.languages_detected.join(", ")
-                ));
-            }
+    if do_hooks {
+        ui::step("Installing Claude Code hooks...");
+        if let Err(e) = hooks::install(Path::new(".")) {
+            ui::warn(&format!("Failed to install hooks: {}", e));
         }
+    }
+
+    if do_claude_integration {
+        scaffold::install_claude_integration()?;
     }
 
     // Notion import
@@ -107,6 +72,82 @@ pub async fn run(no_scan: bool, from_notion: Option<String>, resume: bool) -> Re
                 "Notion support is not enabled. Rebuild with: cargo install project-wiki --features notion"
             );
         }
+    }
+
+    Ok(())
+}
+
+/// Run the codebase scan and populate the wiki with detected domains.
+fn run_scan() -> Result<()> {
+    let result = scan::run()?;
+
+    if result.domains.is_empty() {
+        ui::info(
+            "No domains detected. You can add them manually with `project-wiki add domain <name>`.",
+        );
+        return Ok(());
+    }
+
+    let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
+
+    // Create domain directories and write _overview.md for each domain
+    ui::step("Writing domain overviews...");
+    for domain in &result.domains {
+        let domain_dir = Path::new(".wiki/domains").join(&domain.name);
+        fs::create_dir_all(&domain_dir).with_context(|| {
+            format!(
+                "Failed to create domain directory: {}",
+                domain_dir.display()
+            )
+        })?;
+
+        let overview_content = scan::generate_domain_overview(domain, &result.domains);
+        let overview_path = domain_dir.join("_overview.md");
+        fs::write(&overview_path, &overview_content)
+            .with_context(|| format!("Failed to write {}", overview_path.display()))?;
+    }
+
+    // Generate _graph.md
+    ui::step("Generating dependency graph...");
+    let graph_content = scan::generate_graph(&result.domains);
+    fs::write(".wiki/_graph.md", &graph_content).context("Failed to write _graph.md")?;
+
+    // Generate _index.md
+    ui::step("Generating wiki index...");
+    let index_content = scan::generate_index(&result.domains, &date);
+    fs::write(".wiki/_index.md", &index_content).context("Failed to write _index.md")?;
+
+    // Generate _needs-review.md
+    ui::step("Writing needs-review with collected TODOs...");
+    let needs_review_content = scan::generate_needs_review(&result.domains);
+    fs::write(".wiki/_needs-review.md", &needs_review_content)
+        .context("Failed to write _needs-review.md")?;
+
+    // Generate memory candidates
+    ui::step("Generating memory candidates...");
+    let candidate_list = candidates::generate(&result.domains);
+    if candidate_list.is_empty() {
+        ui::info("No memory candidates detected from scan.");
+    } else {
+        candidates::write_candidates_file(Path::new(".wiki"), &candidate_list)?;
+        ui::info(&format!(
+            "{} memory candidate(s) written to _candidates.md",
+            candidate_list.len()
+        ));
+    }
+
+    eprintln!();
+    ui::success(&format!(
+        "Populated wiki with {} domain(s), {} files scanned.",
+        result.domains.len(),
+        result.total_files_scanned,
+    ));
+
+    if !result.languages_detected.is_empty() {
+        ui::info(&format!(
+            "Languages: {}",
+            result.languages_detected.join(", ")
+        ));
     }
 
     Ok(())

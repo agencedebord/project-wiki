@@ -12,12 +12,16 @@ use crate::wiki::common::{DOMAIN_PARENT_DIRS, LINK_RE};
 use crate::wiki::config;
 use crate::wiki::note::{Confidence, MemoryItemStatus, WikiNote};
 
-pub fn run() -> Result<()> {
+pub fn run(strict: bool) -> Result<()> {
     let wiki_dir = common::find_wiki_root()?;
     let wiki_config = config::load(&wiki_dir);
 
     ui::app_header(env!("CARGO_PKG_VERSION"));
-    ui::action("Validating wiki");
+    if strict {
+        ui::action("Validating wiki (strict mode)");
+    } else {
+        ui::action("Validating wiki");
+    }
 
     let mut errors: usize = 0;
     let mut warnings: usize = 0;
@@ -134,7 +138,36 @@ pub fn run() -> Result<()> {
         warnings += orphans.len();
     }
 
-    // ─── 8. Memory items ───
+    // ─── 8. Domain name coherence ───
+    ui::header("Domain name coherence");
+    let incoherent = check_domain_name_coherence(&notes);
+    if incoherent.is_empty() {
+        ui::resolved("All domain folder names match note domain fields.");
+        passes += 1;
+    } else {
+        for msg in &incoherent {
+            ui::unresolved(msg);
+        }
+        errors += incoherent.len();
+    }
+
+    // ─── 9. Cross-domain dependencies ───
+    ui::header("Cross-domain dependencies");
+    let missing_deps = check_missing_dependencies(&notes);
+    if missing_deps.is_empty() {
+        ui::resolved("All referenced dependencies exist in wiki.");
+        passes += 1;
+    } else {
+        for (note_path, dep) in &missing_deps {
+            ui::warn(&format!(
+                "{} depends on '{}' but no such domain exists in wiki",
+                note_path, dep
+            ));
+        }
+        warnings += missing_deps.len();
+    }
+
+    // ─── 10. Memory items ───
     ui::header("Memory items");
     let (mi_errors, mi_warnings) = check_memory_items(&notes);
     if mi_errors.is_empty() && mi_warnings.is_empty() {
@@ -158,6 +191,12 @@ pub fn run() -> Result<()> {
         }
         errors += mi_errors.len();
         warnings += mi_warnings.len();
+    }
+
+    // In strict mode, warnings are promoted to errors
+    if strict {
+        errors += warnings;
+        warnings = 0;
     }
 
     // ─── Summary ───
@@ -471,7 +510,98 @@ fn check_orphan_notes() -> Result<Vec<String>> {
     Ok(orphans)
 }
 
-/// Check 8: Validate memory_items for structural integrity across all notes
+/// Check 8: Verify folder name matches the domain field from note content
+fn check_domain_name_coherence(notes: &[WikiNote]) -> Vec<String> {
+    let mut errors = Vec::new();
+
+    for note in notes {
+        // Extract the expected domain name from the note's path
+        // Path format: .wiki/domains/<domain_name>/_overview.md (or similar)
+        let path = Path::new(&note.path);
+        let folder_domain = path
+            .parent()
+            .and_then(|p| p.file_name())
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
+
+        // Skip non-domain notes (decisions, etc.)
+        if folder_domain.is_empty() || !note.path.contains("domains/") || folder_domain == "domains"
+        {
+            continue;
+        }
+
+        // The note's domain field should match the folder name
+        if !note.domain.is_empty() && note.domain != folder_domain {
+            errors.push(format!(
+                "{}: folder name '{}' does not match domain field '{}'",
+                note.path, folder_domain, note.domain
+            ));
+        }
+    }
+
+    errors
+}
+
+/// Check 9: Verify that domains referenced in Dependencies sections exist in .wiki/domains/
+fn check_missing_dependencies(notes: &[WikiNote]) -> Vec<(String, String)> {
+    // Collect all existing domain names
+    let existing_domains: HashSet<String> = notes
+        .iter()
+        .filter(|n| n.path.contains("domains/"))
+        .filter_map(|n| {
+            Path::new(&n.path)
+                .parent()
+                .and_then(|p| p.file_name())
+                .and_then(|n| n.to_str())
+                .map(|s| s.to_string())
+        })
+        .collect();
+
+    let mut missing = Vec::new();
+
+    // Check each note's content for a Dependencies section and extract linked domains
+    for note in notes {
+        if !note.path.contains("domains/") {
+            continue;
+        }
+
+        let mut in_deps_section = false;
+        for line in note.content.lines() {
+            if line.starts_with("## Dependencies") || line.starts_with("## Depends on") {
+                in_deps_section = true;
+                continue;
+            }
+            if line.starts_with("## ") && in_deps_section {
+                break;
+            }
+            if in_deps_section {
+                // Look for links like [domain](../domain/_overview.md) or plain names
+                for cap in LINK_RE.captures_iter(line) {
+                    let link_text = &cap[1];
+                    let link_target = &cap[2];
+
+                    // Extract domain from link target path
+                    let dep_domain = Path::new(link_target)
+                        .parent()
+                        .and_then(|p| p.file_name())
+                        .and_then(|n| n.to_str())
+                        .unwrap_or(link_text);
+
+                    if !dep_domain.is_empty()
+                        && dep_domain != "."
+                        && !existing_domains.contains(dep_domain)
+                    {
+                        missing.push((note.path.clone(), dep_domain.to_string()));
+                    }
+                }
+            }
+        }
+    }
+
+    missing
+}
+
+/// Check 10: Validate memory_items for structural integrity across all notes
 fn check_memory_items(notes: &[WikiNote]) -> (Vec<String>, Vec<String>) {
     let mut errors: Vec<String> = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
@@ -1080,6 +1210,98 @@ mod tests {
         let (errors, warnings) = check_memory_items(&notes);
         assert!(errors.is_empty(), "Unexpected errors: {:?}", errors);
         assert!(warnings.is_empty(), "Unexpected warnings: {:?}", warnings);
+    }
+
+    // ─── check_domain_name_coherence ───
+
+    #[test]
+    fn validate_domain_name_coherence_mismatch() {
+        let notes = vec![WikiNote {
+            path: ".wiki/domains/billing/_overview.md".to_string(),
+            domain: "invoicing".to_string(), // mismatch: folder is "billing"
+            confidence: Confidence::Confirmed,
+            last_updated: None,
+            related_files: Vec::new(),
+            deprecated: false,
+            title: "Test".to_string(),
+            content: String::new(),
+            memory_items: Vec::new(),
+        }];
+
+        let errors = check_domain_name_coherence(&notes);
+        assert_eq!(errors.len(), 1);
+        assert!(errors[0].contains("billing"));
+        assert!(errors[0].contains("invoicing"));
+    }
+
+    #[test]
+    fn validate_domain_name_coherence_ok() {
+        let notes = vec![WikiNote {
+            path: ".wiki/domains/billing/_overview.md".to_string(),
+            domain: "billing".to_string(),
+            confidence: Confidence::Confirmed,
+            last_updated: None,
+            related_files: Vec::new(),
+            deprecated: false,
+            title: "Test".to_string(),
+            content: String::new(),
+            memory_items: Vec::new(),
+        }];
+
+        let errors = check_domain_name_coherence(&notes);
+        assert!(errors.is_empty());
+    }
+
+    // ─── check_missing_dependencies ───
+
+    #[test]
+    fn validate_missing_dependency_warning() {
+        let notes = vec![WikiNote {
+            path: ".wiki/domains/billing/_overview.md".to_string(),
+            domain: "billing".to_string(),
+            confidence: Confidence::Confirmed,
+            last_updated: None,
+            related_files: Vec::new(),
+            deprecated: false,
+            title: "Billing".to_string(),
+            content: "## Dependencies\n\n- [payments](../payments/_overview.md)\n".to_string(),
+            memory_items: Vec::new(),
+        }];
+
+        let missing = check_missing_dependencies(&notes);
+        assert_eq!(missing.len(), 1);
+        assert_eq!(missing[0].1, "payments");
+    }
+
+    #[test]
+    fn validate_dependency_exists_no_warning() {
+        let notes = vec![
+            WikiNote {
+                path: ".wiki/domains/billing/_overview.md".to_string(),
+                domain: "billing".to_string(),
+                confidence: Confidence::Confirmed,
+                last_updated: None,
+                related_files: Vec::new(),
+                deprecated: false,
+                title: "Billing".to_string(),
+                content: "## Dependencies\n\n- [auth](../auth/_overview.md)\n".to_string(),
+                memory_items: Vec::new(),
+            },
+            WikiNote {
+                path: ".wiki/domains/auth/_overview.md".to_string(),
+                domain: "auth".to_string(),
+                confidence: Confidence::Confirmed,
+                last_updated: None,
+                related_files: Vec::new(),
+                deprecated: false,
+                title: "Auth".to_string(),
+                content: String::new(),
+                memory_items: Vec::new(),
+            },
+        ];
+
+        let missing = check_missing_dependencies(&notes);
+        assert!(missing.is_empty());
     }
 
     #[test]

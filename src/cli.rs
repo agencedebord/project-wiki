@@ -24,9 +24,17 @@ struct Cli {
 enum Commands {
     /// Initialize a .wiki/ folder in the current project
     Init {
-        /// Skip automatic codebase scan
+        /// Run codebase scan to auto-detect domains
         #[arg(long)]
-        no_scan: bool,
+        scan: bool,
+
+        /// Install Claude Code hooks for automatic wiki integration
+        #[arg(long)]
+        hooks: bool,
+
+        /// Full setup: scan + hooks + CLAUDE.md patch + slash commands
+        #[arg(long)]
+        full: bool,
 
         /// Import structure from a Notion database
         #[arg(long)]
@@ -41,7 +49,11 @@ enum Commands {
     Status,
 
     /// Validate wiki notes for consistency
-    Validate,
+    Validate {
+        /// Treat warnings as errors (exit code 1 if any warnings)
+        #[arg(long)]
+        strict: bool,
+    },
 
     /// Consult wiki notes for a domain or all domains
     Consult {
@@ -112,6 +124,10 @@ enum Commands {
         /// Read hook JSON from stdin (for PreToolUse hook)
         #[arg(long)]
         hook: bool,
+
+        /// Output as JSON (for programmatic use)
+        #[arg(long)]
+        json: bool,
     },
 
     /// Detect wiki drift after a file change (used by Claude Code hooks)
@@ -124,6 +140,61 @@ enum Commands {
         #[arg(long)]
         hook: bool,
     },
+
+    /// Check modified files against wiki memory items
+    ///
+    /// Resolves each file to its wiki domain, then surfaces relevant memory items
+    /// (exceptions, decisions, business rules) so you know what to watch for.
+    ///
+    /// Resolution is file-to-domain only — no semantic diff analysis.
+    ///
+    /// Examples:
+    ///   project-wiki check-diff                          # check unstaged git changes
+    ///   project-wiki check-diff src/billing/invoice.ts   # check specific files
+    ///   project-wiki check-diff --staged --json          # staged changes, JSON output
+    CheckDiff {
+        /// Files to check (default: git diff --name-only)
+        files: Vec<String>,
+
+        /// Use staged changes only (git diff --cached)
+        #[arg(long)]
+        staged: bool,
+
+        /// Output as JSON (for programmatic use / hooks)
+        #[arg(long, conflicts_with = "pr_comment")]
+        json: bool,
+
+        /// Output as GitHub PR comment markdown (silent if low sensitivity)
+        #[arg(long, conflicts_with = "json")]
+        pr_comment: bool,
+
+        /// Maximum memory items to show per domain
+        #[arg(long, default_value = "3")]
+        max_items: usize,
+    },
+
+    /// Promote a memory candidate to a confirmed memory item
+    Promote {
+        /// Candidate ID (e.g. billing-001)
+        candidate_id: String,
+
+        /// Confidence level (default: confirmed)
+        #[arg(long)]
+        confidence: Option<String>,
+
+        /// Override candidate text with a reformulation
+        #[arg(long)]
+        text: Option<String>,
+    },
+
+    /// Reject a memory candidate
+    Reject {
+        /// Candidate ID (e.g. billing-001)
+        candidate_id: String,
+    },
+
+    /// Generate memory candidates from a codebase scan
+    GenerateCandidates,
 
     /// Install Claude Code hooks for automatic wiki integration
     InstallHooks,
@@ -163,14 +234,16 @@ pub async fn run() -> Result<()> {
 
     match cli.command {
         Commands::Init {
-            no_scan,
+            scan,
+            hooks,
+            full,
             from_notion,
             resume,
-        } => init::run(no_scan, from_notion, resume).await,
+        } => init::run(scan, hooks, full, from_notion, resume).await,
 
         Commands::Status => wiki::status::run(),
 
-        Commands::Validate => wiki::validate::run(),
+        Commands::Validate { strict } => wiki::validate::run(strict),
 
         Commands::Consult { domain, all } => wiki::consult::run(domain.as_deref(), all),
 
@@ -200,11 +273,11 @@ pub async fn run() -> Result<()> {
             wiki::manage::import_folder(&folder, domain.as_deref())
         }
 
-        Commands::Context { file, hook } => {
+        Commands::Context { file, hook, json } => {
             if hook {
                 wiki::context::run_from_stdin()
             } else if let Some(f) = file {
-                wiki::context::run(&f)
+                wiki::context::run(&f, json)
             } else {
                 bail!("Provide --file <path> or --hook")
             }
@@ -218,6 +291,48 @@ pub async fn run() -> Result<()> {
             } else {
                 bail!("Provide --file <path> or --hook")
             }
+        }
+
+        Commands::CheckDiff {
+            files,
+            staged,
+            json,
+            pr_comment,
+            max_items,
+        } => wiki::check_diff::run(&files, staged, json, pr_comment, max_items),
+
+        Commands::Promote {
+            candidate_id,
+            confidence,
+            text,
+        } => wiki::promote::promote(
+            std::path::Path::new(".wiki"),
+            &candidate_id,
+            confidence.as_deref(),
+            text.as_deref(),
+        ),
+
+        Commands::Reject { candidate_id } => {
+            wiki::promote::reject(std::path::Path::new(".wiki"), &candidate_id)
+        }
+
+        Commands::GenerateCandidates => {
+            let wiki_dir = std::path::Path::new(".wiki");
+            if !wiki_dir.exists() {
+                bail!("No .wiki/ found. Run `project-wiki init` first.");
+            }
+            let scan_result = init::scan::run()?;
+            let candidates = init::candidates::generate(&scan_result.domains);
+            if candidates.is_empty() {
+                ui::info("No memory candidates detected from scan.");
+            } else {
+                init::candidates::write_candidates_file(wiki_dir, &candidates)?;
+                ui::success(&format!(
+                    "{} memory candidate(s) written to .wiki/_candidates.md",
+                    candidates.len()
+                ));
+            }
+            Ok(())
         }
 
         Commands::InstallHooks => init::hooks::install(&std::env::current_dir()?),

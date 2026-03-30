@@ -40,6 +40,10 @@ pub(crate) const DOMAIN_PARENT_DIRS: &[&str] = &[
     "core",
     "plugins",
     "apps",
+    // TypeScript frameworks
+    "pages",      // Next.js pages router
+    "middleware", // Express middleware
+    "providers",  // NestJS providers
 ];
 
 pub(crate) const SOURCE_EXTENSIONS: &[&str] = &[
@@ -112,8 +116,19 @@ pub fn extract_domain_name(path: &Path, root: &Path) -> Option<String> {
     for (i, component) in components.iter().enumerate() {
         let lower = component.to_lowercase();
         if DOMAIN_PARENT_DIRS.contains(&lower.as_str()) {
-            // The next component is the domain name
-            if let Some(domain) = components.get(i + 1) {
+            // The next component is the domain name — but skip Next.js route groups like (auth)
+            let mut next_idx = i + 1;
+            while next_idx < components.len() {
+                let candidate = components[next_idx];
+                // Next.js route groups: (group-name) — skip them
+                if candidate.starts_with('(') && candidate.ends_with(')') {
+                    next_idx += 1;
+                    continue;
+                }
+                break;
+            }
+
+            if let Some(domain) = components.get(next_idx) {
                 // Only if this next component is a directory (not the file itself),
                 // or is a file that can be treated as a domain
                 let domain_str = domain.to_string();
@@ -125,6 +140,9 @@ pub fn extract_domain_name(path: &Path, root: &Path) -> Option<String> {
                     || domain_name == "mod"
                     || domain_name == "__init__"
                     || domain_name == "main"
+                    || domain_name == "page"
+                    || domain_name == "layout"
+                    || domain_name == "route"
                 {
                     continue;
                 }
@@ -460,6 +478,84 @@ mod tests {
                 f
             );
         }
+    }
+
+    // ─── TypeScript framework domain detection ───
+
+    #[test]
+    fn nextjs_app_router_detects_domain() {
+        let dir = TempDir::new().unwrap();
+        let billing_dir = dir.path().join("app/billing");
+        fs::create_dir_all(&billing_dir).unwrap();
+        fs::write(
+            billing_dir.join("page.tsx"),
+            "export default function Page() {}",
+        )
+        .unwrap();
+
+        let (_files, domains) = discover_structure(dir.path()).unwrap();
+
+        assert!(
+            domains.contains_key("billing"),
+            "Expected 'billing' domain from Next.js app router, found: {:?}",
+            domains.keys().collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn nextjs_app_router_skips_route_groups() {
+        let dir = TempDir::new().unwrap();
+        let billing_dir = dir.path().join("app/(dashboard)/billing");
+        fs::create_dir_all(&billing_dir).unwrap();
+        fs::write(
+            billing_dir.join("page.tsx"),
+            "export default function Page() {}",
+        )
+        .unwrap();
+
+        let (_files, domains) = discover_structure(dir.path()).unwrap();
+
+        assert!(
+            domains.contains_key("billing"),
+            "Expected 'billing' domain (skipping route group), found: {:?}",
+            domains.keys().collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn nextjs_pages_router_detects_domain() {
+        let dir = TempDir::new().unwrap();
+        let billing_dir = dir.path().join("pages/billing");
+        fs::create_dir_all(&billing_dir).unwrap();
+        fs::write(
+            billing_dir.join("index.tsx"),
+            "export default function Page() {}",
+        )
+        .unwrap();
+
+        let (_files, domains) = discover_structure(dir.path()).unwrap();
+
+        assert!(
+            domains.contains_key("billing"),
+            "Expected 'billing' domain from Next.js pages router, found: {:?}",
+            domains.keys().collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn monorepo_packages_detects_domain() {
+        let dir = TempDir::new().unwrap();
+        let billing_dir = dir.path().join("packages/billing/src");
+        fs::create_dir_all(&billing_dir).unwrap();
+        fs::write(billing_dir.join("index.ts"), "export class Invoice {}").unwrap();
+
+        let (_files, domains) = discover_structure(dir.path()).unwrap();
+
+        assert!(
+            domains.contains_key("billing"),
+            "Expected 'billing' domain from monorepo packages, found: {:?}",
+            domains.keys().collect::<Vec<_>>()
+        );
     }
 
     // ─── merge_singular_plural_domains ───

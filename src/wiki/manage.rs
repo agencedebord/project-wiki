@@ -7,7 +7,7 @@ use walkdir::WalkDir;
 
 use crate::ui;
 use crate::wiki;
-use crate::wiki::common::ensure_wiki_exists;
+use crate::wiki::common::{collect_all_notes, ensure_wiki_exists};
 use crate::wiki::note::{Confidence, WikiNote};
 
 /// Resolve a target string to a note file path within .wiki/domains/.
@@ -68,8 +68,23 @@ pub fn import_folder(folder: &str, domain: Option<&str>) -> Result<()> {
 
 // ─── Internal implementations (testable with custom wiki dir) ───
 
+/// Returns true if the target looks like a memory item id (e.g. "billing-001").
+/// Heuristic: ends with `-\d+`.
+fn is_item_id(target: &str) -> bool {
+    if let Some(pos) = target.rfind('-') {
+        let suffix = &target[pos + 1..];
+        !suffix.is_empty() && suffix.chars().all(|c| c.is_ascii_digit())
+    } else {
+        false
+    }
+}
+
 fn confirm_in(wiki_dir: &Path, target: &str) -> Result<()> {
     ensure_wiki_exists(wiki_dir)?;
+
+    if is_item_id(target) {
+        return confirm_item_in(wiki_dir, target);
+    }
 
     let note_path = resolve_note_path(wiki_dir, target)?;
     let mut note = WikiNote::parse(&note_path)
@@ -94,6 +109,58 @@ fn confirm_in(wiki_dir: &Path, target: &str) -> Result<()> {
     ));
 
     Ok(())
+}
+
+/// Confirm a single memory item by its id across all wiki notes.
+fn confirm_item_in(wiki_dir: &Path, item_id: &str) -> Result<()> {
+    let notes = collect_all_notes(wiki_dir)?;
+    let today_str = today();
+
+    for note_data in &notes {
+        let note_path = PathBuf::from(&note_data.path);
+        if !note_data.memory_items.iter().any(|i| i.id == item_id) {
+            continue;
+        }
+
+        // Found the note containing this item
+        let mut note = WikiNote::parse(&note_path)
+            .with_context(|| format!("Failed to parse note: {}", note_path.display()))?;
+
+        let item = note
+            .memory_items
+            .iter_mut()
+            .find(|i| i.id == item_id)
+            .expect("Item must exist — we just checked");
+
+        if item.confidence == Confidence::Confirmed {
+            ui::warn(&format!("{item_id} is already confirmed"));
+            // Still update last_reviewed
+            item.last_reviewed = Some(today_str);
+            note.write(&note_path)
+                .with_context(|| format!("Failed to write note: {}", note_path.display()))?;
+            return Ok(());
+        }
+
+        let old_confidence = item.confidence.clone();
+        item.confidence = Confidence::Confirmed;
+        item.last_reviewed = Some(today_str);
+
+        note.write(&note_path)
+            .with_context(|| format!("Failed to write note: {}", note_path.display()))?;
+
+        ui::success(&format!(
+            "Confirmed {item_id}: {} ({old_confidence} -> confirmed)",
+            note.memory_items
+                .iter()
+                .find(|i| i.id == item_id)
+                .map(|i| i.text.as_str())
+                .unwrap_or(""),
+        ));
+
+        return Ok(());
+    }
+
+    bail!("No memory item found with id '{item_id}'")
 }
 
 fn deprecate_in(wiki_dir: &Path, target: &str) -> Result<()> {
@@ -687,5 +754,231 @@ mod tests {
         let result = update_domain_references_in_content(content, "billing", "payments");
         assert!(result.contains("domain: payments"));
         assert!(!result.contains("domain: billing"));
+    }
+
+    // ─── is_item_id detection ───
+
+    #[test]
+    fn test_is_item_id_valid_formats() {
+        assert!(is_item_id("billing-001"));
+        assert!(is_item_id("auth-42"));
+        assert!(is_item_id("user-auth-003")); // domain with hyphens + number
+    }
+
+    #[test]
+    fn test_is_item_id_invalid_formats() {
+        assert!(!is_item_id("billing"));
+        assert!(!is_item_id("billing/_overview.md"));
+        assert!(!is_item_id("user-auth")); // no number at end
+        assert!(!is_item_id(""));
+    }
+
+    // ─── confirm item tests ───
+
+    fn note_content_with_items() -> String {
+        r#"---
+title: Billing overview
+confidence: verified
+last_updated: "2026-03-20"
+related_files:
+  - src/billing/invoice.ts
+memory_items:
+  - id: billing-001
+    type: exception
+    text: Le client X utilise encore l'ancien calcul
+    confidence: inferred
+    sources:
+      - kind: file
+        ref: src/billing/legacy.ts
+    status: active
+  - id: billing-002
+    type: decision
+    text: Pas de deduplication des lignes
+    confidence: verified
+    status: active
+  - id: billing-003
+    type: business_rule
+    text: Facture emise apres synchro
+    confidence: seen-in-code
+    status: active
+---
+# Billing
+
+Handles invoicing.
+"#
+        .to_string()
+    }
+
+    #[test]
+    fn confirm_item_changes_confidence() {
+        let dir = TempDir::new().unwrap();
+        let wiki = setup_wiki(&dir);
+        create_domain_with_note(&wiki, "billing", "_overview.md", &note_content_with_items());
+
+        confirm_item_in(&wiki, "billing-001").unwrap();
+
+        let note = WikiNote::parse(&wiki.join("domains/billing/_overview.md")).unwrap();
+        let item = note
+            .memory_items
+            .iter()
+            .find(|i| i.id == "billing-001")
+            .unwrap();
+        assert_eq!(item.confidence, Confidence::Confirmed);
+    }
+
+    #[test]
+    fn confirm_item_updates_last_reviewed() {
+        let dir = TempDir::new().unwrap();
+        let wiki = setup_wiki(&dir);
+        create_domain_with_note(&wiki, "billing", "_overview.md", &note_content_with_items());
+
+        confirm_item_in(&wiki, "billing-001").unwrap();
+
+        let note = WikiNote::parse(&wiki.join("domains/billing/_overview.md")).unwrap();
+        let item = note
+            .memory_items
+            .iter()
+            .find(|i| i.id == "billing-001")
+            .unwrap();
+        let today_str = Utc::now().format("%Y-%m-%d").to_string();
+        assert_eq!(item.last_reviewed, Some(today_str));
+    }
+
+    #[test]
+    fn confirm_item_preserves_other_items() {
+        let dir = TempDir::new().unwrap();
+        let wiki = setup_wiki(&dir);
+        create_domain_with_note(&wiki, "billing", "_overview.md", &note_content_with_items());
+
+        confirm_item_in(&wiki, "billing-001").unwrap();
+
+        let note = WikiNote::parse(&wiki.join("domains/billing/_overview.md")).unwrap();
+
+        // billing-002 and billing-003 should be unchanged
+        let item2 = note
+            .memory_items
+            .iter()
+            .find(|i| i.id == "billing-002")
+            .unwrap();
+        assert_eq!(item2.confidence, Confidence::Verified);
+
+        let item3 = note
+            .memory_items
+            .iter()
+            .find(|i| i.id == "billing-003")
+            .unwrap();
+        assert_eq!(item3.confidence, Confidence::SeenInCode);
+    }
+
+    #[test]
+    fn confirm_item_preserves_note_metadata() {
+        let dir = TempDir::new().unwrap();
+        let wiki = setup_wiki(&dir);
+        create_domain_with_note(&wiki, "billing", "_overview.md", &note_content_with_items());
+
+        confirm_item_in(&wiki, "billing-001").unwrap();
+
+        let note = WikiNote::parse(&wiki.join("domains/billing/_overview.md")).unwrap();
+
+        // Note-level metadata should be unchanged
+        assert_eq!(note.confidence, Confidence::Verified);
+        assert_eq!(note.title, "Billing overview");
+        assert!(note.content.contains("Handles invoicing."));
+    }
+
+    #[test]
+    fn confirm_note_still_works() {
+        let dir = TempDir::new().unwrap();
+        let wiki = setup_wiki(&dir);
+        create_domain_with_note(&wiki, "billing", "_overview.md", &note_content_with_items());
+
+        // Confirming the domain should change note confidence, not item confidence
+        confirm_in(&wiki, "billing").unwrap();
+
+        let note = WikiNote::parse(&wiki.join("domains/billing/_overview.md")).unwrap();
+        assert_eq!(note.confidence, Confidence::Confirmed);
+
+        // Items should not be individually modified
+        let item1 = note
+            .memory_items
+            .iter()
+            .find(|i| i.id == "billing-001")
+            .unwrap();
+        assert_eq!(item1.confidence, Confidence::Inferred);
+    }
+
+    #[test]
+    fn confirm_item_not_found() {
+        let dir = TempDir::new().unwrap();
+        let wiki = setup_wiki(&dir);
+        create_domain_with_note(&wiki, "billing", "_overview.md", &note_content_with_items());
+
+        let result = confirm_item_in(&wiki, "billing-999");
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("No memory item found with id 'billing-999'")
+        );
+    }
+
+    #[test]
+    fn confirm_item_already_confirmed() {
+        let dir = TempDir::new().unwrap();
+        let wiki = setup_wiki(&dir);
+
+        // Create a note where billing-001 is already confirmed
+        let content = r#"---
+title: Billing
+confidence: verified
+memory_items:
+  - id: billing-001
+    type: exception
+    text: Already confirmed item
+    confidence: confirmed
+    status: active
+---
+# Billing
+"#;
+        create_domain_with_note(&wiki, "billing", "_overview.md", content);
+
+        // Should not error, just warn
+        confirm_item_in(&wiki, "billing-001").unwrap();
+
+        // last_reviewed should still be updated
+        let note = WikiNote::parse(&wiki.join("domains/billing/_overview.md")).unwrap();
+        let item = note
+            .memory_items
+            .iter()
+            .find(|i| i.id == "billing-001")
+            .unwrap();
+        let today_str = Utc::now().format("%Y-%m-%d").to_string();
+        assert_eq!(item.last_reviewed, Some(today_str));
+    }
+
+    #[test]
+    fn confirm_item_roundtrip_save_load() {
+        let dir = TempDir::new().unwrap();
+        let wiki = setup_wiki(&dir);
+        create_domain_with_note(&wiki, "billing", "_overview.md", &note_content_with_items());
+
+        confirm_item_in(&wiki, "billing-002").unwrap();
+
+        // Re-parse and verify all 3 items are present and correct
+        let note = WikiNote::parse(&wiki.join("domains/billing/_overview.md")).unwrap();
+        assert_eq!(note.memory_items.len(), 3);
+
+        let item2 = note
+            .memory_items
+            .iter()
+            .find(|i| i.id == "billing-002")
+            .unwrap();
+        assert_eq!(item2.confidence, Confidence::Confirmed);
+        assert!(item2.last_reviewed.is_some());
+
+        // Other items are intact
+        assert!(note.memory_items.iter().any(|i| i.id == "billing-001"));
+        assert!(note.memory_items.iter().any(|i| i.id == "billing-003"));
     }
 }

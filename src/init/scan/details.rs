@@ -21,6 +21,11 @@ static RE_RS_STRUCT: LazyLock<Regex> =
 static RE_GO_TYPE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"type\s+(\w+)\s+struct").unwrap());
 
+// TypeScript: Zod schema definitions (e.g., const InvoiceSchema = z.object({...}))
+static RE_ZOD_SCHEMA: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?:export\s+)?(?:const|let)\s+(\w+(?:Schema|Type|Validator))\s*=\s*z\.").unwrap()
+});
+
 // Route/endpoint extraction
 static RE_EXPRESS: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r#"(?:app|router)\.\s*(get|post|put|patch|delete)\s*\(\s*['"]([^'"]+)['"]"#).unwrap()
@@ -35,6 +40,13 @@ static RE_ACTIX: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"#\[\s*(get|post|put|patch|delete)\s*\(\s*"([^"]+)""#).unwrap());
 static RE_GO_HTTP: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r#"(?:HandleFunc|Handle)\s*\(\s*"([^"]+)""#).unwrap());
+// NestJS decorators: @Get('/path'), @Post('/path'), etc.
+static RE_NESTJS_ROUTE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r#"@(Get|Post|Put|Patch|Delete)\s*\(\s*['"]([^'"]+)['"]"#).unwrap()
+});
+// NestJS controller prefix: @Controller('billing')
+static RE_NESTJS_CONTROLLER: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r#"@Controller\s*\(\s*['"]([^'"]+)['"]"#).unwrap());
 
 // ─── Types ───
 
@@ -104,6 +116,10 @@ fn extract_models(content: &str, ext: &str, details: &mut DomainDetails) {
             for cap in RE_JS_MODELS.captures_iter(content) {
                 details.models.push(cap[1].to_string());
             }
+            // Zod schemas: const InvoiceSchema = z.object({...})
+            for cap in RE_ZOD_SCHEMA.captures_iter(content) {
+                details.models.push(cap[1].to_string());
+            }
         }
         "py" => {
             for cap in RE_PY_CLASS.captures_iter(content) {
@@ -148,6 +164,22 @@ fn extract_routes(content: &str, ext: &str, path: &Path, details: &mut DomainDet
         }
     }
 
+    // NestJS decorators: @Get('/path'), @Post('/path')
+    if ext == "ts" || ext == "tsx" {
+        let controller_prefix = RE_NESTJS_CONTROLLER
+            .captures(content)
+            .map(|c| c[1].to_string());
+        for cap in RE_NESTJS_ROUTE.captures_iter(content) {
+            let method = cap[1].to_uppercase();
+            let path = &cap[2];
+            let full_path = match &controller_prefix {
+                Some(prefix) => format!("{method} /{prefix}/{}", path.trim_start_matches('/')),
+                None => format!("{method} {path}"),
+            };
+            details.routes.push(full_path);
+        }
+    }
+
     // Rust Actix/Axum style: #[get("/...")]
     for cap in RE_ACTIX.captures_iter(content) {
         details
@@ -158,6 +190,160 @@ fn extract_routes(content: &str, ext: &str, path: &Path, details: &mut DomainDet
     // Go: http.HandleFunc("/...", handler)
     for cap in RE_GO_HTTP.captures_iter(content) {
         details.routes.push(cap[1].to_string());
+    }
+}
+
+// ─── Tests ───
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_zod_schema_detected() {
+        let content = r#"
+import { z } from 'zod';
+
+export const InvoiceSchema = z.object({
+    amount: z.number(),
+    currency: z.string(),
+});
+
+const PaymentValidator = z.object({
+    method: z.string(),
+});
+"#;
+        let mut details = DomainDetails::default();
+        extract_models(content, "ts", &mut details);
+        assert!(details.models.contains(&"InvoiceSchema".to_string()));
+        assert!(details.models.contains(&"PaymentValidator".to_string()));
+    }
+
+    #[test]
+    fn test_ts_interface_and_class_detected() {
+        let content = r#"
+export interface Invoice {
+    id: string;
+    amount: number;
+}
+
+export class InvoiceService {
+    create() {}
+}
+
+export enum Status {
+    Active,
+    Inactive,
+}
+"#;
+        let mut details = DomainDetails::default();
+        extract_models(content, "ts", &mut details);
+        assert!(details.models.contains(&"Invoice".to_string()));
+        assert!(details.models.contains(&"InvoiceService".to_string()));
+        assert!(details.models.contains(&"Status".to_string()));
+    }
+
+    #[test]
+    fn test_nestjs_routes_detected() {
+        let content = r#"
+@Controller('billing')
+export class BillingController {
+    @Get('invoices')
+    findAll() {}
+
+    @Post('invoices')
+    create() {}
+}
+"#;
+        let mut details = DomainDetails::default();
+        let path = Path::new("src/billing/billing.controller.ts");
+        extract_routes(content, "ts", path, &mut details);
+        assert!(
+            details
+                .routes
+                .contains(&"GET /billing/invoices".to_string()),
+            "Expected NestJS GET route, found: {:?}",
+            details.routes
+        );
+        assert!(
+            details
+                .routes
+                .contains(&"POST /billing/invoices".to_string()),
+            "Expected NestJS POST route, found: {:?}",
+            details.routes
+        );
+    }
+
+    #[test]
+    fn test_nestjs_routes_without_controller_prefix() {
+        let content = r#"
+export class AppController {
+    @Get('health')
+    health() {}
+}
+"#;
+        let mut details = DomainDetails::default();
+        let path = Path::new("src/app.controller.ts");
+        extract_routes(content, "ts", path, &mut details);
+        assert!(
+            details.routes.contains(&"GET health".to_string()),
+            "Expected NestJS GET route without prefix, found: {:?}",
+            details.routes
+        );
+    }
+
+    #[test]
+    fn test_express_routes_still_detected() {
+        let content = r#"
+router.get('/invoices', handler);
+app.post('/payments', handler);
+"#;
+        let mut details = DomainDetails::default();
+        let path = Path::new("src/routes/billing.ts");
+        extract_routes(content, "ts", path, &mut details);
+        assert!(
+            details
+                .routes
+                .iter()
+                .any(|r| r.contains("GET") && r.contains("/invoices"))
+        );
+        assert!(
+            details
+                .routes
+                .iter()
+                .any(|r| r.contains("POST") && r.contains("/payments"))
+        );
+    }
+
+    #[test]
+    fn test_comments_extracted() {
+        let content = r#"
+// TODO: refactor this function
+// FIXME: handle edge case
+/* NOTE: important business rule */
+"#;
+        let result = extract_file_details(content, Path::new("src/billing/invoice.ts"));
+        assert_eq!(result.comments.len(), 3);
+        assert!(result.comments.iter().any(|c| c.contains("[TODO]")));
+        assert!(result.comments.iter().any(|c| c.contains("[FIXME]")));
+        assert!(result.comments.iter().any(|c| c.contains("[NOTE]")));
+    }
+
+    #[test]
+    fn test_vitest_patterns_in_comments() {
+        // Test files themselves are detected by structure::is_test_file,
+        // but comments in tests are also captured
+        let content = r#"
+// TODO: add edge case tests for billing
+describe('Invoice', () => {
+    it('should calculate total', () => {
+        // NOTE: uses legacy calculation for client X
+    });
+});
+"#;
+        let result = extract_file_details(content, Path::new("tests/billing.test.ts"));
+        assert!(result.comments.iter().any(|c| c.contains("[TODO]")));
+        assert!(result.comments.iter().any(|c| c.contains("[NOTE]")));
     }
 }
 
