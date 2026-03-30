@@ -90,7 +90,7 @@ mod tests {
         writeln!(f, "# comment").unwrap();
         writeln!(f, "staleness_days = 14").unwrap();
         writeln!(f, "unknown_key = hello").unwrap();
-        writeln!(f, "").unwrap();
+        writeln!(f).unwrap();
 
         let config = load(dir.path());
         assert_eq!(config.staleness_days, 14);

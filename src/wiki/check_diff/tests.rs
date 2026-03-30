@@ -815,7 +815,7 @@ fn test_pr_comment_skips_low_sensitivity() {
 
 #[test]
 fn test_pr_comment_formats_medium_sensitivity() {
-    let items = vec![make_item(
+    let items = [make_item(
         "billing-001",
         MemoryItemType::BusinessRule,
         "TVA toujours incluse",
@@ -905,5 +905,151 @@ fn test_pr_comment_json_roundtrip() {
     assert_eq!(
         parsed["domains"][0]["memory_items"][0]["text"],
         "Use bcrypt for passwords"
+    );
+}
+
+// ─── Snapshot tests: exact text format non-regression ───
+
+#[test]
+fn snapshot_text_format_full_output() {
+    let result = build_result(
+        3,
+        vec![
+            make_domain_hit(
+                "billing",
+                DomainRole::Primary,
+                vec!["src/billing/invoice.ts", "src/billing/tax.ts"],
+                vec![
+                    make_item_output("b-001", "exception", "Client X uses legacy pricing", "confirmed", true),
+                    make_item_output("b-002", "decision", "No dedup on CSV import", "verified", false),
+                ],
+                vec![DomainWarning {
+                    kind: "stale".to_string(),
+                    note: ".wiki/domains/billing/_overview.md".to_string(),
+                    days: Some(42),
+                }],
+            ),
+            make_domain_hit(
+                "payments",
+                DomainRole::Secondary,
+                vec!["src/payments/stripe.ts"],
+                vec![make_item_output(
+                    "p-001",
+                    "business_rule",
+                    "Retry failed charges 3 times",
+                    "confirmed",
+                    false,
+                )],
+                vec![],
+            ),
+        ],
+        vec!["config/deploy.yaml".to_string()],
+    );
+    let text = format_text(&result);
+
+    let expected = "\
+[project-wiki] Diff check
+
+3 file(s) analyzed
+2 domain(s) affected
+Sensitivity: high
+
+Affected domains
+  billing (primary) — 2 file(s), 2 item(s)
+  payments (secondary) — 1 file(s), 1 item(s)
+
+Priority memory
+  billing:
+    [exception] Client X uses legacy pricing [confirmed] *
+    [decision] No dedup on CSV import [verified]
+  payments:
+    [business_rule] Retry failed charges 3 times [confirmed]
+
+Warnings
+  \u{26a0} .wiki/domains/billing/_overview.md is stale (42 days)
+
+Suggested actions
+  \u{2192} Relire .wiki/domains/billing/_overview.md
+  \u{2192} Verifier si l'exception 'Client X uses legacy pricing' reste valide
+  \u{2192} Verifier si la decision 'No dedup on CSV import' reste valide
+
+Unresolved files
+  config/deploy.yaml";
+
+    assert_eq!(text, expected);
+}
+
+#[test]
+fn snapshot_pr_comment_markdown_format() {
+    let result = build_result(
+        2,
+        vec![make_domain_hit(
+            "billing",
+            DomainRole::Primary,
+            vec!["src/billing/invoice.ts", "src/billing/tax.ts"],
+            vec![
+                make_item_output("b-001", "exception", "Client X uses legacy pricing", "confirmed", true),
+                make_item_output("b-002", "decision", "No dedup on CSV import", "verified", false),
+            ],
+            vec![DomainWarning {
+                kind: "stale".to_string(),
+                note: ".wiki/domains/billing/_overview.md".to_string(),
+                days: Some(42),
+            }],
+        )],
+        vec![],
+    );
+    let comment = format_pr_comment(&result).expect("should produce comment for high sensitivity");
+
+    let expected = "\
+## \u{1f9e0} project-wiki \u{2014} Memory Check
+<!-- project-wiki-memory-check -->
+
+**Sensitivity: high**
+
+### Domains touched
+- **billing** (2 file(s), 2 memory item(s))
+
+### Priority memory
+| Type | Item | Confidence |
+|------|------|------------|
+| exception | Client X uses legacy pricing | confirmed |
+| decision | No dedup on CSV import | verified |
+
+### Warnings
+- \u{26a0}\u{fe0f} .wiki/domains/billing/_overview.md is stale (42 days)
+
+### Suggested actions
+- Relire .wiki/domains/billing/_overview.md
+- Verifier si l'exception 'Client X uses legacy pricing' reste valide
+- Verifier si la decision 'No dedup on CSV import' reste valide";
+
+    assert_eq!(comment, expected);
+}
+
+#[test]
+fn snapshot_pr_comment_returns_none_for_low_sensitivity() {
+    let result = build_result(1, vec![], vec!["random.txt".to_string()]);
+    assert_eq!(result.sensitivity, Sensitivity::Low);
+    assert!(format_pr_comment(&result).is_none());
+}
+
+// ── Schema version tests (task 028) ──
+
+#[test]
+fn test_schema_version_serializes_as_top_level_field() {
+    let result = CheckDiffResult {
+        schema_version: "1".to_string(),
+        files_analyzed: 0,
+        sensitivity: Sensitivity::Low,
+        domains: Vec::new(),
+        unresolved_files: Vec::new(),
+        suggested_actions: Vec::new(),
+    };
+    let json: serde_json::Value = serde_json::to_value(&result).unwrap();
+    assert_eq!(json["schema_version"], "1");
+    assert!(
+        json.get("schema_version").is_some(),
+        "schema_version must be a top-level JSON field"
     );
 }

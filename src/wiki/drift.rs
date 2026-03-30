@@ -777,7 +777,7 @@ index abc1234..def5678 100644
     #[test]
     fn check_items_identifier_heuristic() {
         use crate::wiki::note::{
-            Confidence, MemoryItem, MemoryItemSource, MemoryItemStatus, MemoryItemType,
+            Confidence, MemoryItem, MemoryItemStatus, MemoryItemType,
         };
 
         let note = WikiNote {
@@ -824,7 +824,6 @@ index abc1234..def5678 100644
         assert!(warnings[0].message.contains("identifier"));
     }
 
-    #[test]
     #[test]
     fn line_proximity_exact_boundary() {
         let hunk = HunkRange {
@@ -931,6 +930,7 @@ index abc1234..def5678 100644
         );
     }
 
+    #[test]
     fn existing_drift_tests_still_pass() {
         // Regression: ensure all original DriftKind variants still work
         let dir = TempDir::new().unwrap();

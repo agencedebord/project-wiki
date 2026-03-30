@@ -229,7 +229,7 @@ mod tests {
             pre.iter()
                 .any(|e| e["hooks"][0]["command"] == "custom-safety-check")
         );
-        assert!(pre.iter().any(|e| is_managed_entry(e)));
+        assert!(pre.iter().any(is_managed_entry));
     }
 
     #[test]

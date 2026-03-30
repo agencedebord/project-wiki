@@ -257,7 +257,7 @@ mod tests {
             test_files: vec![],
         };
 
-        let overview = generate_domain_overview(&domain, &[domain.clone()]);
+        let overview = generate_domain_overview(&domain, std::slice::from_ref(&domain));
         assert!(overview.contains("Billing"));
         assert!(overview.contains("Invoice"));
         assert!(overview.contains("inferred"));
