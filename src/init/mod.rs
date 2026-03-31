@@ -1,4 +1,6 @@
 pub mod candidates;
+#[cfg(feature = "enrich")]
+pub mod enrich;
 pub mod hooks;
 #[cfg(feature = "notion")]
 pub mod notion;
@@ -19,8 +21,9 @@ pub async fn run(
     full: bool,
     from_notion: Option<String>,
     resume: bool,
+    do_enrich: bool,
 ) -> Result<()> {
-    // --full enables all opt-in steps
+    // --full enables all opt-in steps (but NOT --enrich, which requires an API key)
     let do_scan = scan || full || from_notion.is_some();
     let do_hooks = hooks || full;
     let do_claude_integration = full;
@@ -30,7 +33,27 @@ pub async fn run(
     }
 
     if do_scan {
-        run_scan()?;
+        let active_domains = run_scan()?;
+
+        if do_enrich && !active_domains.is_empty() {
+            #[cfg(feature = "enrich")]
+            {
+                ui::step("Enriching domains with LLM suggestions...");
+                if let Err(e) = enrich::run(&active_domains, Path::new(".wiki")).await {
+                    ui::warn(&format!(
+                        "LLM enrichment failed: {}. Continuing without enrichment.",
+                        e
+                    ));
+                }
+            }
+
+            #[cfg(not(feature = "enrich"))]
+            {
+                anyhow::bail!(
+                    "LLM enrichment is not enabled. Rebuild with: cargo install codefidence --features enrich"
+                );
+            }
+        }
     }
 
     if do_hooks {
@@ -78,21 +101,45 @@ pub async fn run(
 }
 
 /// Run the codebase scan and populate the wiki with detected domains.
-fn run_scan() -> Result<()> {
+/// Returns the list of active domains (with signal) for downstream enrichment.
+fn run_scan() -> Result<Vec<scan::DomainInfo>> {
     let result = scan::run()?;
 
     if result.domains.is_empty() {
         ui::info(
             "No domains detected. You can add them manually with `codefidence add domain <name>`.",
         );
-        return Ok(());
+        return Ok(Vec::new());
+    }
+
+    // Filter out domains with no useful signals
+    let total_discovered = result.domains.len();
+    let active_domains: Vec<scan::DomainInfo> = result
+        .domains
+        .into_iter()
+        .filter(|d| d.has_signal())
+        .collect();
+
+    let skipped = total_discovered - active_domains.len();
+    if skipped > 0 {
+        ui::info(&format!(
+            "Skipped {} domain(s) with no useful signals (no models, routes, tests, or dependencies).",
+            skipped
+        ));
+    }
+
+    if active_domains.is_empty() {
+        ui::info(
+            "No domains with useful signals found. You can add context manually with `codefidence add context`.",
+        );
+        return Ok(Vec::new());
     }
 
     let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
 
     // Create domain directories and write _overview.md for each domain
     ui::step("Writing domain overviews...");
-    for domain in &result.domains {
+    for domain in &active_domains {
         let domain_dir = Path::new(".wiki/domains").join(&domain.name);
         fs::create_dir_all(&domain_dir).with_context(|| {
             format!(
@@ -101,7 +148,7 @@ fn run_scan() -> Result<()> {
             )
         })?;
 
-        let overview_content = scan::generate_domain_overview(domain, &result.domains);
+        let overview_content = scan::generate_domain_overview(domain, &active_domains);
         let overview_path = domain_dir.join("_overview.md");
         fs::write(&overview_path, &overview_content)
             .with_context(|| format!("Failed to write {}", overview_path.display()))?;
@@ -109,23 +156,23 @@ fn run_scan() -> Result<()> {
 
     // Generate _graph.md
     ui::step("Generating dependency graph...");
-    let graph_content = scan::generate_graph(&result.domains);
+    let graph_content = scan::generate_graph(&active_domains);
     fs::write(".wiki/_graph.md", &graph_content).context("Failed to write _graph.md")?;
 
     // Generate _index.md
     ui::step("Generating wiki index...");
-    let index_content = scan::generate_index(&result.domains, &date);
+    let index_content = scan::generate_index(&active_domains, &date);
     fs::write(".wiki/_index.md", &index_content).context("Failed to write _index.md")?;
 
     // Generate _needs-review.md
     ui::step("Writing needs-review with collected TODOs...");
-    let needs_review_content = scan::generate_needs_review(&result.domains);
+    let needs_review_content = scan::generate_needs_review(&active_domains);
     fs::write(".wiki/_needs-review.md", &needs_review_content)
         .context("Failed to write _needs-review.md")?;
 
     // Generate memory candidates
     ui::step("Generating memory candidates...");
-    let candidate_list = candidates::generate(&result.domains);
+    let candidate_list = candidates::generate(&active_domains);
     if candidate_list.is_empty() {
         ui::info("No memory candidates detected from scan.");
     } else {
@@ -138,8 +185,9 @@ fn run_scan() -> Result<()> {
 
     eprintln!();
     ui::success(&format!(
-        "Populated wiki with {} domain(s), {} files scanned.",
-        result.domains.len(),
+        "Populated wiki with {} domain(s) ({} skipped), {} files scanned.",
+        active_domains.len(),
+        skipped,
         result.total_files_scanned,
     ));
 
@@ -150,7 +198,7 @@ fn run_scan() -> Result<()> {
         ));
     }
 
-    Ok(())
+    Ok(active_domains)
 }
 
 /// Merge Notion domain data into existing wiki notes.
