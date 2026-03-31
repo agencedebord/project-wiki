@@ -13,10 +13,12 @@ use crate::ui;
 use crate::wiki::common;
 use crate::wiki::config;
 
-use domains::{check_domain_name_coherence, check_missing_dependencies, check_undocumented_domains};
+use domains::{
+    check_domain_name_coherence, check_missing_dependencies, check_undocumented_domains,
+};
 use links::{
-    collect_all_md_files, check_broken_links, check_dead_references,
-    check_deprecated_references, check_orphan_notes,
+    check_broken_links, check_dead_references, check_deprecated_references, check_orphan_notes,
+    collect_all_md_files,
 };
 use memory_items::check_memory_items;
 use migration_status::check_migration_status;

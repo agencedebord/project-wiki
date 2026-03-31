@@ -752,10 +752,12 @@ memory_items:
 
         let result = promote(&wiki, "billing-001", None, None);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("No _candidates.md found"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("No _candidates.md found")
+        );
     }
 
     #[test]
@@ -780,10 +782,7 @@ memory_items:
 
         let result = promote(&wiki, "billing-001", None, None);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("Target note"));
+        assert!(result.unwrap_err().to_string().contains("Target note"));
     }
 
     #[test]
@@ -818,8 +817,14 @@ memory_items:
         let content = fs::read_to_string(wiki.join("_candidates.md")).unwrap();
         // billing-001 should be confirmed, billing-002 should still be pending
         let sections: Vec<&str> = content.split("### ").collect();
-        let billing_001 = sections.iter().find(|s| s.starts_with("billing-001")).unwrap();
-        let billing_002 = sections.iter().find(|s| s.starts_with("billing-002")).unwrap();
+        let billing_001 = sections
+            .iter()
+            .find(|s| s.starts_with("billing-001"))
+            .unwrap();
+        let billing_002 = sections
+            .iter()
+            .find(|s| s.starts_with("billing-002"))
+            .unwrap();
         assert!(billing_001.contains("**status**: confirmed"));
         assert!(billing_002.contains("**status**: pending"));
     }
@@ -832,10 +837,12 @@ memory_items:
 
         let result = reject(&wiki, "billing-999");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("No candidate found with id 'billing-999'"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("No candidate found with id 'billing-999'")
+        );
     }
 
     #[test]
@@ -845,10 +852,12 @@ memory_items:
 
         let result = reject(&wiki, "billing-001");
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("No _candidates.md found"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("No _candidates.md found")
+        );
     }
 
     #[test]
@@ -868,7 +877,10 @@ memory_items:
 
     #[test]
     fn test_parse_confidence_all_values() {
-        assert_eq!(parse_confidence("confirmed").unwrap(), Confidence::Confirmed);
+        assert_eq!(
+            parse_confidence("confirmed").unwrap(),
+            Confidence::Confirmed
+        );
         assert_eq!(parse_confidence("verified").unwrap(), Confidence::Verified);
         assert_eq!(
             parse_confidence("seen-in-code").unwrap(),
@@ -956,10 +968,12 @@ memory_items:
 
         let result = find_next_candidate(&wiki);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("No _candidates.md found"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("No _candidates.md found")
+        );
     }
 
     #[test]
@@ -967,16 +981,17 @@ memory_items:
         let dir = TempDir::new().unwrap();
         let wiki = setup_wiki(&dir);
 
-        let content = candidates_content()
-            .replace("**status**: pending", "**status**: rejected");
+        let content = candidates_content().replace("**status**: pending", "**status**: rejected");
         create_candidates_file(&wiki, &content);
 
         let result = find_next_candidate(&wiki);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("No pending candidates"));
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("No pending candidates")
+        );
     }
 
     #[test]
@@ -1102,8 +1117,7 @@ memory_items:
         let dir = TempDir::new().unwrap();
         let wiki = setup_wiki(&dir);
 
-        let content =
-            candidates_content().replace("**status**: pending", "**status**: confirmed");
+        let content = candidates_content().replace("**status**: pending", "**status**: confirmed");
         create_candidates_file(&wiki, &content);
 
         let result = find_next_candidate(&wiki);

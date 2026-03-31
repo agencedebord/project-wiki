@@ -920,8 +920,20 @@ fn snapshot_text_format_full_output() {
                 DomainRole::Primary,
                 vec!["src/billing/invoice.ts", "src/billing/tax.ts"],
                 vec![
-                    make_item_output("b-001", "exception", "Client X uses legacy pricing", "confirmed", true),
-                    make_item_output("b-002", "decision", "No dedup on CSV import", "verified", false),
+                    make_item_output(
+                        "b-001",
+                        "exception",
+                        "Client X uses legacy pricing",
+                        "confirmed",
+                        true,
+                    ),
+                    make_item_output(
+                        "b-002",
+                        "decision",
+                        "No dedup on CSV import",
+                        "verified",
+                        false,
+                    ),
                 ],
                 vec![DomainWarning {
                     kind: "stale".to_string(),
@@ -988,8 +1000,20 @@ fn snapshot_pr_comment_markdown_format() {
             DomainRole::Primary,
             vec!["src/billing/invoice.ts", "src/billing/tax.ts"],
             vec![
-                make_item_output("b-001", "exception", "Client X uses legacy pricing", "confirmed", true),
-                make_item_output("b-002", "decision", "No dedup on CSV import", "verified", false),
+                make_item_output(
+                    "b-001",
+                    "exception",
+                    "Client X uses legacy pricing",
+                    "confirmed",
+                    true,
+                ),
+                make_item_output(
+                    "b-002",
+                    "decision",
+                    "No dedup on CSV import",
+                    "verified",
+                    false,
+                ),
             ],
             vec![DomainWarning {
                 kind: "stale".to_string(),

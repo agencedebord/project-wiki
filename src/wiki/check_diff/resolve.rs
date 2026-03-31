@@ -74,18 +74,8 @@ pub(super) fn resolve_domains(
         if file_cmp != std::cmp::Ordering::Equal {
             return file_cmp;
         }
-        let a_items = a
-            .1
-            .note
-            .as_ref()
-            .map(|n| n.memory_items.len())
-            .unwrap_or(0);
-        let b_items = b
-            .1
-            .note
-            .as_ref()
-            .map(|n| n.memory_items.len())
-            .unwrap_or(0);
+        let a_items = a.1.note.as_ref().map(|n| n.memory_items.len()).unwrap_or(0);
+        let b_items = b.1.note.as_ref().map(|n| n.memory_items.len()).unwrap_or(0);
         b_items.cmp(&a_items)
     });
 
@@ -109,9 +99,12 @@ pub(super) fn resolve_domains(
 
         // Build memory items
         let items_output = match &agg.note {
-            Some(note) => {
-                prioritize_and_format_items(&note.memory_items, all_modified, max_items, &agg.note_path)
-            }
+            Some(note) => prioritize_and_format_items(
+                &note.memory_items,
+                all_modified,
+                max_items,
+                &agg.note_path,
+            ),
             None => Vec::new(),
         };
 

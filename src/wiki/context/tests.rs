@@ -20,12 +20,7 @@ fn make_note(domain: &str, confidence: Confidence, content: &str) -> WikiNote {
     }
 }
 
-fn make_item(
-    id: &str,
-    type_: MemoryItemType,
-    text: &str,
-    confidence: Confidence,
-) -> MemoryItem {
+fn make_item(id: &str, type_: MemoryItemType, text: &str, confidence: Confidence) -> MemoryItem {
     MemoryItem {
         id: id.to_string(),
         type_,
@@ -42,11 +37,7 @@ fn make_item(
     }
 }
 
-fn make_note_with_items(
-    domain: &str,
-    confidence: Confidence,
-    items: Vec<MemoryItem>,
-) -> WikiNote {
+fn make_note_with_items(domain: &str, confidence: Confidence, items: Vec<MemoryItem>) -> WikiNote {
     WikiNote {
         path: format!(".wiki/domains/{}/_overview.md", domain),
         domain: domain.to_string(),
@@ -556,12 +547,20 @@ fn snapshot_truncation_preserves_marker() {
     let mut note = make_note_with_items("billing", Confidence::Confirmed, items);
     // Add many related files to inflate the output well past 2000 chars
     note.related_files = (0..100)
-        .map(|i| format!("src/billing/very/deep/nested/module_{}/handler_with_long_name.ts", i))
+        .map(|i| {
+            format!(
+                "src/billing/very/deep/nested/module_{}/handler_with_long_name.ts",
+                i
+            )
+        })
         .collect();
     // Add long markdown content for dependencies
     let mut deps = "## Dependencies\n".to_string();
     for i in 0..50 {
-        deps.push_str(&format!("- extremely-long-dependency-package-name-number-{}\n", i));
+        deps.push_str(&format!(
+            "- extremely-long-dependency-package-name-number-{}\n",
+            i
+        ));
     }
     note.content = deps;
 
@@ -579,7 +578,9 @@ fn snapshot_truncation_preserves_marker() {
         &summary[summary.len().saturating_sub(30)..]
     );
     // The header line must still be intact
-    assert!(summary.starts_with("[project-wiki] Domain: billing (confidence: confirmed, updated: 2026-03-28)"));
+    assert!(summary.starts_with(
+        "[project-wiki] Domain: billing (confidence: confirmed, updated: 2026-03-28)"
+    ));
 }
 
 // ── Schema version tests (task 028) ──
@@ -625,9 +626,7 @@ fn make_json_output_full() -> ContextJsonOutput {
                 confidence: "inferred".to_string(),
             },
         ],
-        warnings: vec![
-            "1 item(s) have low confidence — verify before relying on them".to_string(),
-        ],
+        warnings: vec!["1 item(s) have low confidence — verify before relying on them".to_string()],
         fallback_mode: false,
     }
 }
@@ -650,13 +649,19 @@ fn json_shape_full_structure_has_all_fields() {
     let parsed: serde_json::Value = serde_json::to_value(&output).unwrap();
 
     // All top-level fields must be present
-    assert!(parsed.get("schema_version").is_some(), "missing schema_version");
+    assert!(
+        parsed.get("schema_version").is_some(),
+        "missing schema_version"
+    );
     assert!(parsed.get("domain").is_some(), "missing domain");
     assert!(parsed.get("confidence").is_some(), "missing confidence");
     assert!(parsed.get("last_updated").is_some(), "missing last_updated");
     assert!(parsed.get("memory_items").is_some(), "missing memory_items");
     assert!(parsed.get("warnings").is_some(), "missing warnings");
-    assert!(parsed.get("fallback_mode").is_some(), "missing fallback_mode");
+    assert!(
+        parsed.get("fallback_mode").is_some(),
+        "missing fallback_mode"
+    );
 
     // Exactly 7 top-level keys (no extra fields)
     assert_eq!(parsed.as_object().unwrap().len(), 7);
@@ -724,11 +729,22 @@ fn json_shape_no_domain_found_uses_nulls() {
     assert_eq!(parsed["schema_version"], "1");
     assert!(parsed["domain"].is_null(), "domain should be null");
     assert!(parsed["confidence"].is_null(), "confidence should be null");
-    assert!(parsed["last_updated"].is_null(), "last_updated should be null");
+    assert!(
+        parsed["last_updated"].is_null(),
+        "last_updated should be null"
+    );
     assert_eq!(parsed["memory_items"].as_array().unwrap().len(), 0);
     assert_eq!(parsed["fallback_mode"], false);
-    assert!(!parsed["warnings"].as_array().unwrap().is_empty(), "should have a warning");
-    assert!(parsed["warnings"][0].as_str().unwrap().contains("No domain"));
+    assert!(
+        !parsed["warnings"].as_array().unwrap().is_empty(),
+        "should have a warning"
+    );
+    assert!(
+        parsed["warnings"][0]
+            .as_str()
+            .unwrap()
+            .contains("No domain")
+    );
 }
 
 #[test]
@@ -762,7 +778,10 @@ fn json_shape_type_field_uses_serde_rename() {
     let parsed: serde_json::Value = serde_json::to_value(&item).unwrap();
 
     assert!(parsed.get("type").is_some(), "field should be named 'type'");
-    assert!(parsed.get("type_").is_none(), "field should NOT be named 'type_'");
+    assert!(
+        parsed.get("type_").is_none(),
+        "field should NOT be named 'type_'"
+    );
 }
 
 #[test]

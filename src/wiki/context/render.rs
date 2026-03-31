@@ -2,9 +2,9 @@ use std::collections::HashMap;
 
 use crate::wiki::note::{Confidence, MemoryItemStatus, WikiNote};
 
-use super::prioritize::prioritize_memory_items;
 use super::MAX_CONTEXT_LEN;
 use super::MAX_MEMORY_ITEMS;
+use super::prioritize::prioritize_memory_items;
 
 /// Format a WikiNote into a compact summary for LLM context injection.
 ///

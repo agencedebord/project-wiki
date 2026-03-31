@@ -32,16 +32,16 @@ pub(super) fn prioritize_and_format_items(
 
     // Sort: type priority asc, confidence priority asc, related first (false > true reversed)
     scored.sort_by(|a, b| {
-        let type_cmp = a.1 .0.cmp(&b.1 .0);
+        let type_cmp = a.1.0.cmp(&b.1.0);
         if type_cmp != std::cmp::Ordering::Equal {
             return type_cmp;
         }
-        let conf_cmp = a.1 .1.cmp(&b.1 .1);
+        let conf_cmp = a.1.1.cmp(&b.1.1);
         if conf_cmp != std::cmp::Ordering::Equal {
             return conf_cmp;
         }
         // Related files first (true = 0, false = 1 for sorting)
-        b.1 .2.cmp(&a.1 .2)
+        b.1.2.cmp(&a.1.2)
     });
 
     scored

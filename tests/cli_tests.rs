@@ -192,7 +192,10 @@ fn init_creates_gitattributes_for_generated_files() {
     cmd_in(&dir).arg("init").assert().success();
 
     let gitattributes_path = dir.path().join(".wiki/.gitattributes");
-    assert!(gitattributes_path.exists(), ".wiki/.gitattributes should be created by init");
+    assert!(
+        gitattributes_path.exists(),
+        ".wiki/.gitattributes should be created by init"
+    );
 
     let content = fs::read_to_string(&gitattributes_path).unwrap();
     assert!(content.contains("_index.md merge=ours"));
@@ -223,8 +226,14 @@ fn rebuild_regenerates_index() {
 
     // Verify _index.md was regenerated with proper content
     let index = fs::read_to_string(dir.path().join(".wiki/_index.md")).unwrap();
-    assert!(index.contains("Project Wiki"), "_index.md should be regenerated");
-    assert!(!index.contains("CORRUPTED"), "_index.md should not contain corrupted content");
+    assert!(
+        index.contains("Project Wiki"),
+        "_index.md should be regenerated"
+    );
+    assert!(
+        !index.contains("CORRUPTED"),
+        "_index.md should not contain corrupted content"
+    );
 }
 
 #[test]
@@ -244,7 +253,10 @@ fn rebuild_preserves_overview_notes() {
 
     // Verify _overview.md was NOT modified
     let after = fs::read_to_string(dir.path().join(".wiki/domains/billing/_overview.md")).unwrap();
-    assert_eq!(after, overview_content, "_overview.md should be preserved by rebuild");
+    assert_eq!(
+        after, overview_content,
+        "_overview.md should be preserved by rebuild"
+    );
 }
 
 // ─── status ───

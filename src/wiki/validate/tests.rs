@@ -1,7 +1,5 @@
 use super::domains::{check_domain_name_coherence, check_missing_dependencies};
-use super::links::{
-    check_broken_links, check_dead_references, check_deprecated_references,
-};
+use super::links::{check_broken_links, check_dead_references, check_deprecated_references};
 use super::memory_items::check_memory_items;
 use super::migration_status::check_migration_status;
 use super::notes::{check_confidence_ratio, check_staleness};
@@ -48,11 +46,7 @@ fn make_item(id: &str, type_: MemoryItemType, confidence: Confidence) -> MemoryI
     }
 }
 
-fn make_note_with_items(
-    path: &str,
-    confidence: Confidence,
-    items: Vec<MemoryItem>,
-) -> WikiNote {
+fn make_note_with_items(path: &str, confidence: Confidence, items: Vec<MemoryItem>) -> WikiNote {
     WikiNote {
         path: path.to_string(),
         domain: "test".to_string(),

@@ -71,8 +71,8 @@ pub(super) fn should_ignore(path: &str) -> bool {
     }
 
     let ignored_extensions = [
-        ".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg", ".woff", ".woff2", ".ttf", ".eot",
-        ".mp3", ".mp4", ".zip", ".tar", ".gz", ".pdf", ".exe", ".dll", ".so", ".dylib",
+        ".png", ".jpg", ".jpeg", ".gif", ".ico", ".svg", ".woff", ".woff2", ".ttf", ".eot", ".mp3",
+        ".mp4", ".zip", ".tar", ".gz", ".pdf", ".exe", ".dll", ".so", ".dylib",
     ];
     for ext in &ignored_extensions {
         if path.ends_with(ext) {

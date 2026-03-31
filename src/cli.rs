@@ -314,22 +314,16 @@ pub async fn run() -> Result<()> {
             let wiki_dir = std::path::Path::new(".wiki");
             let id = if next {
                 let found = wiki::promote::find_next_candidate(wiki_dir)?;
-                ui::info(&format!(
-                    "Auto-selected: {} [{}]",
-                    found.0, found.1
-                ));
+                ui::info(&format!("Auto-selected: {} [{}]", found.0, found.1));
                 found.0
             } else if let Some(id) = candidate_id {
                 id
             } else {
-                bail!("Provide a candidate ID or use --next to auto-select the highest-priority pending candidate.")
+                bail!(
+                    "Provide a candidate ID or use --next to auto-select the highest-priority pending candidate."
+                )
             };
-            wiki::promote::promote(
-                wiki_dir,
-                &id,
-                confidence.as_deref(),
-                text.as_deref(),
-            )
+            wiki::promote::promote(wiki_dir, &id, confidence.as_deref(), text.as_deref())
         }
 
         Commands::Reject { candidate_id } => {

@@ -212,8 +212,7 @@ static HUNK_HEADER_RE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@").unwrap());
 
 /// Identifier-like tokens for heuristic matching.
-static IDENT_RE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"[a-zA-Z_]\w{2,}").unwrap());
+static IDENT_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"[a-zA-Z_]\w{2,}").unwrap());
 
 /// Get the raw unified diff for a file (single git invocation).
 fn get_raw_diff(file_path: &str) -> Option<String> {
@@ -275,12 +274,11 @@ fn is_line_near_hunk(line: u32, hunk: &HunkRange, tolerance: u32) -> bool {
 
 /// Common keywords to exclude from identifier heuristic matching.
 const STOPWORDS: &[&str] = &[
-    "let", "var", "const", "for", "while", "if", "else", "return", "function",
-    "import", "export", "from", "this", "self", "true", "false", "null", "none",
-    "some", "string", "number", "boolean", "type", "enum", "struct", "class",
-    "pub", "mod", "use", "new", "match", "async", "await", "try", "catch",
-    "throw", "error", "result", "value", "index", "data", "item", "list",
-    "map", "set", "get", "put", "delete", "post", "with", "that", "the",
+    "let", "var", "const", "for", "while", "if", "else", "return", "function", "import", "export",
+    "from", "this", "self", "true", "false", "null", "none", "some", "string", "number", "boolean",
+    "type", "enum", "struct", "class", "pub", "mod", "use", "new", "match", "async", "await",
+    "try", "catch", "throw", "error", "result", "value", "index", "data", "item", "list", "map",
+    "set", "get", "put", "delete", "post", "with", "that", "the",
 ];
 
 /// Extract identifiers from diff output (added/removed lines only).
@@ -363,10 +361,7 @@ fn check_items_against_diff(
             for ident in diff_identifiers {
                 if item_words.iter().any(|w| w == ident) {
                     impacted = true;
-                    reason = format!(
-                        "identifier \"{}\" from diff matches item text",
-                        ident
-                    );
+                    reason = format!("identifier \"{}\" from diff matches item text", ident);
                     break;
                 }
             }
@@ -657,13 +652,8 @@ index abc1234..def5678 100644
             new_count: 15,
         }];
 
-        let warnings = check_items_against_diff(
-            "billing",
-            &note,
-            "src/billing/pricing.ts",
-            &hunks,
-            &[],
-        );
+        let warnings =
+            check_items_against_diff("billing", &note, "src/billing/pricing.ts", &hunks, &[]);
 
         assert_eq!(warnings.len(), 1);
         assert!(matches!(warnings[0].kind, DriftKind::MemoryItemImpacted));
@@ -710,13 +700,8 @@ index abc1234..def5678 100644
             new_count: 12,
         }];
 
-        let warnings = check_items_against_diff(
-            "billing",
-            &note,
-            "src/billing/pricing.ts",
-            &hunks,
-            &[],
-        );
+        let warnings =
+            check_items_against_diff("billing", &note, "src/billing/pricing.ts", &hunks, &[]);
 
         assert!(warnings.is_empty(), "No warning expected for distant hunk");
     }
@@ -760,13 +745,8 @@ index abc1234..def5678 100644
         }];
 
         // No line info → source proximity check skipped, no identifiers → no warning
-        let warnings = check_items_against_diff(
-            "billing",
-            &note,
-            "src/billing/pricing.ts",
-            &hunks,
-            &[],
-        );
+        let warnings =
+            check_items_against_diff("billing", &note, "src/billing/pricing.ts", &hunks, &[]);
 
         assert!(
             warnings.is_empty(),
@@ -776,9 +756,7 @@ index abc1234..def5678 100644
 
     #[test]
     fn check_items_identifier_heuristic() {
-        use crate::wiki::note::{
-            Confidence, MemoryItem, MemoryItemStatus, MemoryItemType,
-        };
+        use crate::wiki::note::{Confidence, MemoryItem, MemoryItemStatus, MemoryItemType};
 
         let note = WikiNote {
             path: String::new(),
@@ -880,9 +858,7 @@ index abc1234..def5678 100644
     #[test]
     fn identifier_heuristic_no_substring_match() {
         // "tax" should NOT match "syntax" via word-boundary matching
-        use crate::wiki::note::{
-            Confidence, MemoryItem, MemoryItemStatus, MemoryItemType,
-        };
+        use crate::wiki::note::{Confidence, MemoryItem, MemoryItemStatus, MemoryItemType};
 
         let note = WikiNote {
             path: String::new(),

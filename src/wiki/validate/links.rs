@@ -159,7 +159,10 @@ pub(super) fn check_orphan_notes(wiki_dir: &Path) -> Result<Vec<String>> {
 
     let mut orphans = Vec::new();
 
-    for entry in WalkDir::new(&domains_dir).into_iter().filter_map(|e| e.ok()) {
+    for entry in WalkDir::new(&domains_dir)
+        .into_iter()
+        .filter_map(|e| e.ok())
+    {
         let path = entry.path();
         if path.extension().is_none_or(|ext| ext != "md") {
             continue;
