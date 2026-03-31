@@ -18,6 +18,7 @@ path = "src/main.rs"
 [features]
 default = []
 notion = ["dep:reqwest", "dep:futures"]
+enrich = ["dep:reqwest"]
 
 [dependencies]
 # CLI

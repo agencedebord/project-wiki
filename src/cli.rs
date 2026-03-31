@@ -43,6 +43,10 @@ enum Commands {
         /// Resume a previously interrupted init
         #[arg(long)]
         resume: bool,
+
+        /// Enrich domain overviews with LLM-suggested descriptions and behaviors
+        #[arg(long)]
+        enrich: bool,
     },
 
     /// Show wiki status and health summary
@@ -252,7 +256,8 @@ pub async fn run() -> Result<()> {
             full,
             from_notion,
             resume,
-        } => init::run(scan, hooks, full, from_notion, resume).await,
+            enrich,
+        } => init::run(scan, hooks, full, from_notion, resume, enrich).await,
 
         Commands::Status => wiki::status::run(),
 
