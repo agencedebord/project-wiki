@@ -161,6 +161,7 @@ Read
   consult [domain]           Read notes for a domain (or --all)
   search <term>              Full-text search across all notes
   status                     Wiki health: coverage, staleness, confidence
+  review [domain]            Interactive review of domain notes and items
 
 Write
   add domain <name>          Create a new domain

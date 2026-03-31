@@ -80,6 +80,15 @@ enum Commands {
         what: AddCommands,
     },
 
+    /// Interactively review and confirm domain notes
+    Review {
+        /// Domain name to review (all unconfirmed if omitted)
+        domain: Option<String>,
+        /// Review all domains including confirmed ones
+        #[arg(long)]
+        all: bool,
+    },
+
     /// Rebuild the entire wiki from source
     Rebuild,
 
@@ -260,6 +269,11 @@ pub async fn run() -> Result<()> {
             AddCommands::Context { domain, text } => wiki::add::context(&text, domain.as_deref()),
             AddCommands::Decision { text } => wiki::add::decision(&text),
         },
+
+        Commands::Review { domain, all } => {
+            let wiki_dir = std::path::Path::new(".wiki");
+            wiki::review::run(wiki_dir, domain.as_deref(), all)
+        }
 
         Commands::Rebuild => {
             wiki::graph::run()?;

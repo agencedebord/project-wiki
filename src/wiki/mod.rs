@@ -12,6 +12,7 @@ pub mod manage;
 pub mod note;
 pub mod prioritize;
 pub mod promote;
+pub mod review;
 pub mod search;
 pub mod status;
 pub mod validate;
