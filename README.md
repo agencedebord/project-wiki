@@ -59,7 +59,7 @@ related_files:
 memory_items:
   - id: billing-001
     type: exception
-    text: Le client X utilise encore l'ancien calcul
+    text: Client X still uses the legacy pricing calculation
     confidence: confirmed
     related_files:
       - src/billing/legacy_pricing.ts
@@ -69,7 +69,7 @@ memory_items:
     status: active
   - id: billing-002
     type: decision
-    text: Pas de deduplication des lignes importees
+    text: No deduplication on imported rows
     confidence: verified
     sources:
       - kind: file
@@ -96,9 +96,9 @@ $ codefidence context --file src/billing/invoice.ts
 [codefidence] Domain: billing (confidence: verified, updated: 2026-03-28)
 
 Memory:
-  [exception] Le client X utilise encore l'ancien calcul [confirmed]
-  [decision] Pas de deduplication des lignes importees [verified]
-  [business_rule] La facture est emise apres synchro [seen-in-code]
+  [exception] Client X still uses the legacy pricing calculation [confirmed]
+  [decision] No deduplication on imported rows [verified]
+  [business_rule] Invoice is issued after sync completes [seen-in-code]
 
 Dependencies: payments, taxes
 ```
@@ -121,11 +121,11 @@ Affected domains
 
 Priority memory
   billing:
-    [exception] Le client X utilise encore l'ancien calcul [confirmed] *
-    [decision] Pas de deduplication des lignes importees [verified]
+    [exception] Client X still uses the legacy pricing calculation [confirmed] *
+    [decision] No deduplication on imported rows [verified]
 
 Suggested actions
-  → Verifier si l'exception 'Le client X utilise encore l'ancien calcul' reste valide
+  → Verify whether the exception 'Client X still uses the legacy pricing calculation' is still valid
 ```
 
 With no arguments, checks unstaged git changes. Also supports `--staged`, `--json`, and `--pr-comment`.
