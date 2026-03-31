@@ -60,7 +60,7 @@ Accept either side. Candidates are ephemeral. Re-run `generate-candidates` if ne
 2. **Use `validate --strict` for releases** — promotes warnings to errors.
 3. **Keep items concrete** — write "Client X uses legacy pricing via `legacy_pricing.ts`", not "there's a special case somewhere."
 4. **Deprecate instead of deleting** — maintains history and audit trail.
-5. **Review migration status** — `project-wiki status` shows notes without memory items and coverage gaps.
+5. **Review migration status** — `project-wiki validate` reports notes without memory items (check #11).
 
 ## Recommended PR conventions
 
