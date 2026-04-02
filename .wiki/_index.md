@@ -1,7 +1,7 @@
 # Codefidence
 
 > Auto-generated. Do not edit manually.
-> Last updated: 2026-03-31
+> Last updated: 2026-04-02
 
 ## Domains
 
@@ -37,7 +37,9 @@
 
 ## Decisions
 
-_No decisions recorded yet._
+| Date | Decision | Domain |
+|------|----------|--------|
+| — | [Codefidence is Claude-native](./decisions/claude-native-architecture.md) | Analyze |
 
 ## Health
 
