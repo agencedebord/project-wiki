@@ -3,6 +3,8 @@
 **Structured memory items that surface context before you edit and check decisions after you diff.**
 
 [![CI](https://github.com/agencedebord/codefidence/actions/workflows/ci.yml/badge.svg)](https://github.com/agencedebord/codefidence/actions/workflows/ci.yml)
+[![crates.io](https://img.shields.io/crates/v/codefidence.svg)](https://crates.io/crates/codefidence)
+[![npm](https://img.shields.io/npm/v/@codefidence/cli.svg)](https://www.npmjs.com/package/@codefidence/cli)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](LICENSE-MIT)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-blue)](https://www.rust-lang.org)
 
@@ -30,7 +32,16 @@ These memory items are surfaced at two critical moments:
 ## Quick start
 
 ```bash
-# Install from source (Rust 1.85+)
+# Install via npm (recommended — works on macOS, Linux, Windows)
+npm install -g @codefidence/cli
+
+# Or via Homebrew (macOS / Linux)
+brew install agencedebord/tap/codefidence
+
+# Or via Cargo (Rust 1.85+)
+cargo install codefidence
+
+# Or from source
 git clone https://github.com/agencedebord/codefidence.git
 cd codefidence && cargo install --path .
 
@@ -236,11 +247,11 @@ staleness_days = 30
 auto_index = true
 ```
 
-## Current state (v0.2.0)
+## Current state (v0.3.0)
 
-The core loop works: memory items are parsed, surfaced by `context`, and checked by `check-diff`. The `confirm` and `promote` commands let you curate knowledge over time.
+The core loop works: memory items are parsed, surfaced by `context`, and checked by `check-diff`. The `confirm` and `promote` commands let you curate knowledge over time. The `review` command provides interactive domain review.
 
-The codebase scan detects project structure for TypeScript/JavaScript, Python, Rust, Go, Ruby, Java, and PHP. TypeScript is the most tested target. The tool itself is language-agnostic -- memory items are linked to file paths, not to language-specific constructs.
+The codebase scan uses Claude Code as its analysis backend and detects project structure for TypeScript/JavaScript, Python, Rust, Go, Ruby, Java, and PHP. A structural-only scan (`--scan-only`) is available without an API key.
 
 CI integration (`check-diff --pr-comment`) exists but is minimal: it outputs markdown suitable for a PR comment. There is no GitHub Action published yet.
 
@@ -249,12 +260,21 @@ This is pre-1.0 software in active development.
 ## Installation
 
 ```bash
+# npm (recommended — pre-built binaries, no Rust needed)
+npm install -g @codefidence/cli
+
+# Homebrew (macOS / Linux)
+brew install agencedebord/tap/codefidence
+
+# Cargo (requires Rust 1.85+)
+cargo install codefidence
+
+# From source
 git clone https://github.com/agencedebord/codefidence.git
-cd codefidence
-cargo install --path .
+cd codefidence && cargo install --path .
 ```
 
-Requires Rust 1.85.0+.
+Pre-built binaries are also available on the [GitHub Releases](https://github.com/agencedebord/codefidence/releases) page for macOS (ARM/Intel), Linux (x64/ARM), and Windows.
 
 ## Contributing
 
