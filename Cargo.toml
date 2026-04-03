@@ -1,6 +1,6 @@
 [package]
 name = "codefidence"
-version = "0.3.2"
+version = "0.3.3"
 edition = "2024"
 description = "Auto-managed project knowledge wiki for AI-assisted development"
 license = "MIT OR Apache-2.0"
