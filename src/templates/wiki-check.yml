@@ -27,6 +27,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Install codefidence
         run: cargo install codefidence --locked
@@ -37,15 +38,19 @@ jobs:
 
       - name: Get changed files
         id: files
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD | tr '\n' ' ')
+          FILES=$(git diff --name-only "origin/${BASE_REF}...HEAD" | tr '\n' ' ')
           echo "changed=$FILES" >> "$GITHUB_OUTPUT"
 
       - name: Run memory check
         id: check
+        env:
+          CHANGED_FILES: ${{ steps.files.outputs.changed }}
         run: |
           # Pipe directly to file to avoid shell interpretation issues
-          codefidence check-diff --pr-comment ${{ steps.files.outputs.changed }} > /tmp/wiki-comment.md 2>/dev/null || true
+          codefidence check-diff --pr-comment ${CHANGED_FILES} > /tmp/wiki-comment.md 2>/dev/null || true
           if [ -s /tmp/wiki-comment.md ]; then
             echo "has_comment=true" >> "$GITHUB_OUTPUT"
           else
