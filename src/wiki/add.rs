@@ -6,11 +6,12 @@ use std::path::PathBuf;
 use anyhow::{Context, Result, bail};
 use chrono::Utc;
 
+use crate::i18n::t;
 use crate::ui;
 use crate::wiki;
 use crate::wiki::common::{capitalize, ensure_wiki_exists, list_domain_names};
+use crate::wiki::config;
 
-const DOMAIN_OVERVIEW_TEMPLATE: &str = include_str!("../templates/domain_overview.md");
 const DECISION_TEMPLATE: &str = include_str!("../templates/decision.md");
 
 /// Normalize a domain name: lowercase, replace spaces and underscores with hyphens.
@@ -80,6 +81,8 @@ pub fn decision(text: &str) -> Result<()> {
 fn domain_in(wiki_dir: &Path, name: &str) -> Result<()> {
     ensure_wiki_exists(wiki_dir)?;
 
+    let wiki_config = config::load(wiki_dir);
+    let lang = &wiki_config.language;
     let normalized = normalize_domain_name(name);
 
     if normalized.is_empty()
@@ -104,10 +107,29 @@ fn domain_in(wiki_dir: &Path, name: &str) -> Result<()> {
     })?;
 
     let date = Utc::now().format("%Y-%m-%d").to_string();
-    let content = DOMAIN_OVERVIEW_TEMPLATE
-        .replace("{domain}", &normalized)
-        .replace("{Domain}", &capitalize(&normalized.replace('-', " ")))
-        .replace("{date}", &date);
+    let title = capitalize(&normalized.replace('-', " "));
+    let content = format!(
+        "---\ndomain: {domain}\nconfidence: inferred\nlast_updated: {date}\nrelated_files: []\n---\n\n\
+         # {title}\n\n\
+         ## {description}\n{description_placeholder}\n\n\
+         ## {key_behaviors}\n{key_behaviors_placeholder}\n\n\
+         ## {business_rules}\n{business_rules_placeholder}\n\n\
+         ## {dependencies}\n{dependencies_placeholder}\n\n\
+         ## {referenced_by}\n{referenced_by_placeholder}\n",
+        domain = normalized,
+        date = date,
+        title = title,
+        description = t("description", lang),
+        description_placeholder = t("description_placeholder", lang),
+        key_behaviors = t("key_behaviors", lang),
+        key_behaviors_placeholder = t("key_behaviors_placeholder", lang),
+        business_rules = t("business_rules", lang),
+        business_rules_placeholder = t("business_rules_placeholder", lang),
+        dependencies = t("dependencies", lang),
+        dependencies_placeholder = t("dependencies_placeholder", lang),
+        referenced_by = t("referenced_by", lang),
+        referenced_by_placeholder = t("referenced_by_placeholder", lang),
+    );
 
     let overview_path = domain_dir.join("_overview.md");
     fs::write(&overview_path, &content)
@@ -244,13 +266,20 @@ fn guess_domain(wiki_dir: &Path, text: &str) -> Result<String> {
 }
 
 /// Append a bullet point to the "Key behaviors" or "Business rules" section.
+/// Matches both English and French section headers.
 fn append_to_section(content: &str, bullet: &str) -> String {
     let lines: Vec<&str> = content.lines().collect();
     let mut result = Vec::new();
     let mut inserted = false;
 
-    // Try to find "Key behaviors" section first, then "Business rules"
-    let target_sections = ["## Key behaviors", "## Business rules"];
+    // Try to find "Key behaviors" / "Comportements clés" section first,
+    // then "Business rules" / "Règles métier"
+    let target_sections = [
+        "## Key behaviors",
+        "## Comportements clés",
+        "## Business rules",
+        "## Règles métier",
+    ];
 
     let mut target_line_idx: Option<usize> = None;
     for section in &target_sections {
@@ -352,10 +381,14 @@ mod tests {
         fs::create_dir_all(&domain_dir).unwrap();
 
         let date = Utc::now().format("%Y-%m-%d").to_string();
-        let content = DOMAIN_OVERVIEW_TEMPLATE
-            .replace("{domain}", name)
-            .replace("{Domain}", &capitalize(&name.replace('-', " ")))
-            .replace("{date}", &date);
+        let title = capitalize(&name.replace('-', " "));
+        let content = format!(
+            "---\ndomain: {}\nconfidence: inferred\nlast_updated: {}\nrelated_files: []\n---\n\n\
+             # {}\n\n## Description\n_Placeholder._\n\n## Key behaviors\n_Placeholder._\n\n\
+             ## Business rules\n_Placeholder._\n\n## Dependencies\n_Placeholder._\n\n\
+             ## Referenced by\n_Placeholder._\n",
+            name, date, title
+        );
         fs::write(domain_dir.join("_overview.md"), content).unwrap();
     }
 
@@ -507,6 +540,16 @@ mod tests {
         // The bullet should appear before "## Business rules"
         let behavior_pos = result.find("- New behavior").unwrap();
         let rules_pos = result.find("## Business rules").unwrap();
+        assert!(behavior_pos < rules_pos);
+    }
+
+    #[test]
+    fn append_to_section_inserts_in_french_behaviors() {
+        let content = "---\ntitle: Test\n---\n\n# Test\n\n## Comportements clés\n_Placeholder._\n\n## Règles métier\n_Placeholder._\n";
+        let result = append_to_section(content, "- Nouveau comportement [confirmed]");
+        assert!(result.contains("- Nouveau comportement [confirmed]"));
+        let behavior_pos = result.find("- Nouveau comportement").unwrap();
+        let rules_pos = result.find("## Règles métier").unwrap();
         assert!(behavior_pos < rules_pos);
     }
 

@@ -6,9 +6,11 @@ use anyhow::{Context, Result};
 use chrono::Utc;
 use regex::Regex;
 
+use crate::i18n::t;
 use crate::ui;
 use crate::wiki::common;
 use crate::wiki::common::LINK_RE;
+use crate::wiki::config;
 
 static SECTION_RE: LazyLock<Regex> = LazyLock::new(|| Regex::new(r"^##\s+").unwrap());
 
@@ -56,6 +58,8 @@ fn mermaid_id(name: &str) -> String {
 
 pub fn run() -> Result<()> {
     let wiki_dir = common::find_wiki_root()?;
+    let wiki_config = config::load(&wiki_dir);
+    let lang = &wiki_config.language;
 
     ui::action("Regenerating dependency graph");
 
@@ -188,14 +192,17 @@ pub fn run() -> Result<()> {
     };
 
     let output = format!(
-        "# Domain dependency graph\n\n\
-         > Auto-generated from domain notes. Do not edit manually.\n\
+        "# {}\n\n\
+         > {}\n\
          > Last regenerated: {}\n\n\
          ```mermaid\n\
          graph LR\n\
          {}\n\
          ```\n",
-        date, graph_body
+        t("dependency_graph", lang),
+        t("auto_generated_graph", lang),
+        date,
+        graph_body
     );
 
     // 5. Write to .wiki/_graph.md
@@ -212,8 +219,9 @@ pub fn run() -> Result<()> {
     Ok(())
 }
 
-/// Parse the "## Dependencies" section from an overview file.
+/// Parse the "## Dependencies" / "## Dépendances" section from an overview file.
 /// Looks for markdown links: `- [Label](path)` and extracts the target domain name.
+/// Matches both English and French section headers.
 fn parse_dependencies_section(content: &str) -> Vec<(String, String)> {
     let mut in_deps_section = false;
     let mut deps: Vec<(String, String)> = Vec::new();
@@ -223,7 +231,8 @@ fn parse_dependencies_section(content: &str) -> Vec<(String, String)> {
 
         // Detect section boundaries
         if SECTION_RE.is_match(trimmed) {
-            if trimmed.to_lowercase().contains("dependencies") {
+            let lower = trimmed.to_lowercase();
+            if lower.contains("dependencies") || lower.contains("dépendances") {
                 in_deps_section = true;
                 continue;
             } else if in_deps_section {
@@ -409,5 +418,26 @@ Nothing here about deps.
     #[test]
     fn mermaid_id_preserves_underscores() {
         assert_eq!(mermaid_id("my_module"), "my_module");
+    }
+
+    #[test]
+    fn parse_deps_french_section_header() {
+        let content = "\
+# Overview
+
+## Dépendances
+
+- [Users](../users/_overview.md) — authentification partagée
+- [Billing](../billing/_overview.md)
+
+## Notes du code
+
+Autres choses.
+";
+        let deps = parse_dependencies_section(content);
+        assert_eq!(deps.len(), 2);
+        assert_eq!(deps[0].0, "users");
+        assert_eq!(deps[0].1, "authentification partagée");
+        assert_eq!(deps[1].0, "billing");
     }
 }

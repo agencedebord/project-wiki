@@ -14,6 +14,7 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 use crate::ui;
+use crate::wiki::config;
 
 pub async fn run(
     scan: bool,
@@ -22,14 +23,47 @@ pub async fn run(
     from_notion: Option<String>,
     resume: bool,
     scan_only: bool,
+    language: &str,
 ) -> Result<()> {
+    // Warn if language is not explicitly supported
+    if !crate::i18n::is_supported(language) {
+        ui::warn(&format!(
+            "Language \"{}\" is not supported. Falling back to English. Supported: en, fr.",
+            language
+        ));
+    }
+
     // --full enables all opt-in steps
     let do_scan = scan || scan_only || full || from_notion.is_some();
     let do_hooks = hooks || full;
     let do_claude_integration = full;
 
     if !resume {
-        scaffold::run()?;
+        scaffold::run(language)?;
+    } else if language != "en" {
+        // On --resume, update config.toml if a non-default language was explicitly passed
+        let config_path = Path::new(".wiki/config.toml");
+        if config_path.exists() {
+            if let Ok(content) = fs::read_to_string(config_path) {
+                let updated = if content.contains("language =") {
+                    content
+                        .lines()
+                        .map(|line| {
+                            if line.trim().starts_with("language") {
+                                format!("language = \"{}\"", language)
+                            } else {
+                                line.to_string()
+                            }
+                        })
+                        .collect::<Vec<_>>()
+                        .join("\n")
+                        + "\n"
+                } else {
+                    format!("{}language = \"{}\"\n", content, language)
+                };
+                let _ = fs::write(config_path, updated);
+            }
+        }
     }
 
     if do_scan {
@@ -83,6 +117,9 @@ pub async fn run(
 /// Run the codebase scan, analyze with Claude, and populate the wiki.
 /// If `scan_only` is true, skip LLM analysis and generate structural-only overviews.
 fn run_scan(scan_only: bool) -> Result<()> {
+    let wiki_config = config::load(Path::new(".wiki"));
+    let lang = &wiki_config.language;
+
     let result = scan::run()?;
 
     if result.domains.is_empty() {
@@ -123,7 +160,7 @@ fn run_scan(scan_only: bool) -> Result<()> {
         HashMap::new()
     } else {
         ui::step("Analyzing domains with Claude...");
-        let analyses = analyze::run(&active_domains, &active_domains, Path::new(".wiki"))?;
+        let analyses = analyze::run(&active_domains, &active_domains, Path::new(".wiki"), lang)?;
         analyses.into_iter().collect()
     };
 
@@ -141,7 +178,7 @@ fn run_scan(scan_only: bool) -> Result<()> {
         })?;
 
         let analysis = analysis_map.get(&domain.name);
-        let overview_content = scan::generate_domain_overview(domain, &active_domains, analysis);
+        let overview_content = scan::generate_domain_overview(domain, &active_domains, analysis, lang);
         let overview_path = domain_dir.join("_overview.md");
         fs::write(&overview_path, &overview_content)
             .with_context(|| format!("Failed to write {}", overview_path.display()))?;
@@ -149,17 +186,17 @@ fn run_scan(scan_only: bool) -> Result<()> {
 
     // Generate _graph.md
     ui::step("Generating dependency graph...");
-    let graph_content = scan::generate_graph(&active_domains);
+    let graph_content = scan::generate_graph(&active_domains, lang);
     fs::write(".wiki/_graph.md", &graph_content).context("Failed to write _graph.md")?;
 
     // Generate _index.md
     ui::step("Generating wiki index...");
-    let index_content = scan::generate_index(&active_domains, &date);
+    let index_content = scan::generate_index(&active_domains, &date, lang);
     fs::write(".wiki/_index.md", &index_content).context("Failed to write _index.md")?;
 
     // Generate _needs-review.md
     ui::step("Writing needs-review with collected TODOs...");
-    let needs_review_content = scan::generate_needs_review(&active_domains);
+    let needs_review_content = scan::generate_needs_review(&active_domains, lang);
     fs::write(".wiki/_needs-review.md", &needs_review_content)
         .context("Failed to write _needs-review.md")?;
 
@@ -169,7 +206,7 @@ fn run_scan(scan_only: bool) -> Result<()> {
     if candidate_list.is_empty() {
         ui::info("No memory candidates detected from scan.");
     } else {
-        candidates::write_candidates_file(Path::new(".wiki"), &candidate_list)?;
+        candidates::write_candidates_file(Path::new(".wiki"), &candidate_list, lang)?;
         ui::info(&format!(
             "{} memory candidate(s) written to _candidates.md",
             candidate_list.len()
@@ -197,6 +234,8 @@ fn run_scan(scan_only: bool) -> Result<()> {
 /// Merge Notion domain data into existing wiki notes.
 #[cfg(feature = "notion")]
 fn merge_notion_data(wiki_dir: &Path, notion_domains: &[notion::NotionDomainInfo]) -> Result<()> {
+    let wiki_config = config::load(wiki_dir);
+    let lang = &wiki_config.language;
     let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
     let mut all_contradictions: Vec<(String, String, String)> = Vec::new(); // (domain, ticket1, ticket2)
 
@@ -218,7 +257,7 @@ fn merge_notion_data(wiki_dir: &Path, notion_domains: &[notion::NotionDomainInfo
 
             // Add business rules
             if !domain_info.business_rules.is_empty() {
-                content.push_str("\n## Business rules (from Notion)\n\n");
+                content.push_str(&format!("\n## {}\n\n", crate::i18n::t("business_rules_from_notion", lang)));
                 for rule in &domain_info.business_rules {
                     content.push_str(&format!("- {} [needs-validation]\n", rule));
                 }
@@ -226,7 +265,7 @@ fn merge_notion_data(wiki_dir: &Path, notion_domains: &[notion::NotionDomainInfo
 
             // Add decisions
             if !domain_info.decisions.is_empty() {
-                content.push_str("\n## Decisions (from Notion)\n\n");
+                content.push_str(&format!("\n## {}\n\n", crate::i18n::t("decisions_from_notion", lang)));
                 for decision in &domain_info.decisions {
                     content.push_str(&format!("- {} [needs-validation]\n", decision));
                 }
@@ -234,7 +273,7 @@ fn merge_notion_data(wiki_dir: &Path, notion_domains: &[notion::NotionDomainInfo
 
             // Add ticket summaries
             if !domain_info.tickets.is_empty() {
-                content.push_str("\n## Notion tickets\n\n");
+                content.push_str(&format!("\n## {}\n\n", crate::i18n::t("notion_tickets", lang)));
                 for ticket in &domain_info.tickets {
                     let status = ticket.status.as_deref().unwrap_or("\u{2014}");
                     content.push_str(&format!(
@@ -262,21 +301,21 @@ fn merge_notion_data(wiki_dir: &Path, notion_domains: &[notion::NotionDomainInfo
             );
 
             if !domain_info.business_rules.is_empty() {
-                content.push_str("\n## Business rules\n\n");
+                content.push_str(&format!("\n## {}\n\n", crate::i18n::t("business_rules", lang)));
                 for rule in &domain_info.business_rules {
                     content.push_str(&format!("- {} [needs-validation]\n", rule));
                 }
             }
 
             if !domain_info.decisions.is_empty() {
-                content.push_str("\n## Decisions\n\n");
+                content.push_str(&format!("\n## {}\n\n", crate::i18n::t("decisions", lang)));
                 for decision in &domain_info.decisions {
                     content.push_str(&format!("- {} [needs-validation]\n", decision));
                 }
             }
 
             if !domain_info.tickets.is_empty() {
-                content.push_str("\n## Notion tickets\n\n");
+                content.push_str(&format!("\n## {}\n\n", crate::i18n::t("notion_tickets", lang)));
                 for ticket in &domain_info.tickets {
                     let status = ticket.status.as_deref().unwrap_or("\u{2014}");
                     content.push_str(&format!(
@@ -311,8 +350,8 @@ fn merge_notion_data(wiki_dir: &Path, notion_domains: &[notion::NotionDomainInfo
             String::new()
         };
 
-        content.push_str("\n## Contradictions (from Notion)\n\n");
-        content.push_str("> These ticket pairs may contain contradictory information. The newer ticket likely supersedes the older one.\n\n");
+        content.push_str(&format!("\n## {}\n\n", crate::i18n::t("contradictions_from_notion", lang)));
+        content.push_str(&format!("> {}\n\n", crate::i18n::t("contradictions_intro", lang)));
 
         for (domain, t1, t2) in &all_contradictions {
             content.push_str(&format!("- **{}**: \"{}\" vs \"{}\"\n", domain, t1, t2));

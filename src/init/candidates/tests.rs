@@ -362,7 +362,7 @@ fn test_generate_candidates_file_format() {
         ),
     ];
 
-    let md = format_candidates_markdown(&candidates);
+    let md = format_candidates_markdown(&candidates, "en");
     assert!(md.starts_with("# Memory Candidates"));
     assert!(md.contains("## billing"));
     assert!(md.contains("### billing-001"));
@@ -378,7 +378,7 @@ fn test_generate_candidates_all_fields_present() {
         "E1",
     )];
 
-    let md = format_candidates_markdown(&candidates);
+    let md = format_candidates_markdown(&candidates, "en");
     assert!(md.contains("**status**: pending"));
     assert!(md.contains("**type**: exception"));
     assert!(md.contains("**confidence**: inferred"));
@@ -392,7 +392,7 @@ fn test_generate_candidates_all_fields_present() {
 
 #[test]
 fn test_generate_candidates_zero_candidates() {
-    let md = format_candidates_markdown(&[]);
+    let md = format_candidates_markdown(&[], "en");
     assert!(md.contains("No candidates detected."));
 }
 
@@ -404,7 +404,7 @@ fn test_generate_candidates_status_pending() {
         CandidateType::Exception,
         "E1",
     )];
-    let md = format_candidates_markdown(&candidates);
+    let md = format_candidates_markdown(&candidates, "en");
     assert!(md.contains("**status**: pending"));
 }
 
@@ -420,7 +420,7 @@ fn test_write_candidates_file() {
         "E1",
     )];
 
-    write_candidates_file(wiki_dir, &candidates).unwrap();
+    write_candidates_file(wiki_dir, &candidates, "en").unwrap();
 
     let path = wiki_dir.join("_candidates.md");
     assert!(path.exists());
@@ -433,7 +433,7 @@ fn test_write_candidates_empty_no_file() {
     let dir = tempfile::TempDir::new().unwrap();
     let wiki_dir = dir.path();
 
-    write_candidates_file(wiki_dir, &[]).unwrap();
+    write_candidates_file(wiki_dir, &[], "en").unwrap();
 
     let path = wiki_dir.join("_candidates.md");
     assert!(!path.exists());
@@ -452,7 +452,7 @@ fn test_write_candidates_idempotent() {
     )];
 
     // Write once
-    write_candidates_file(wiki_dir, &candidates).unwrap();
+    write_candidates_file(wiki_dir, &candidates, "en").unwrap();
 
     // Modify the file to mark one as confirmed
     let path = wiki_dir.join("_candidates.md");
@@ -461,7 +461,7 @@ fn test_write_candidates_idempotent() {
     std::fs::write(&path, &modified).unwrap();
 
     // Write again — should not overwrite confirmed candidate
-    write_candidates_file(wiki_dir, &candidates).unwrap();
+    write_candidates_file(wiki_dir, &candidates, "en").unwrap();
 
     let final_content = std::fs::read_to_string(&path).unwrap();
     // If the candidate was already confirmed, a new file with 0 pending candidates
@@ -492,4 +492,26 @@ fn test_parse_processed_ids() {
     let ids = parse_processed_ids(&path).unwrap();
     assert!(ids.contains("billing-001"));
     assert!(!ids.contains("billing-002"));
+}
+
+#[test]
+fn test_format_candidates_french() {
+    let candidates = vec![make_candidate(
+        "billing-001",
+        "billing",
+        CandidateType::Exception,
+        "E1",
+    )];
+
+    let md = format_candidates_markdown(&candidates, "fr");
+    assert!(md.starts_with("# Candidats mémoire"));
+    assert!(md.contains("confirmer, rejeter ou reformuler"));
+    assert!(!md.contains("Memory Candidates"));
+}
+
+#[test]
+fn test_format_candidates_french_empty() {
+    let md = format_candidates_markdown(&[], "fr");
+    assert!(md.contains("Aucun candidat détecté"));
+    assert!(!md.contains("No candidates detected"));
 }

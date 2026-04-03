@@ -47,6 +47,10 @@ enum Commands {
         /// Structural scan only (no Claude AI analysis)
         #[arg(long)]
         scan_only: bool,
+
+        /// Language for generated wiki content (e.g. "en", "fr")
+        #[arg(long, short = 'l', default_value = "en")]
+        language: String,
     },
 
     /// Show wiki status and health summary
@@ -257,7 +261,8 @@ pub async fn run() -> Result<()> {
             from_notion,
             resume,
             scan_only,
-        } => init::run(scan, hooks, full, from_notion, resume, scan_only).await,
+            language,
+        } => init::run(scan, hooks, full, from_notion, resume, scan_only, &language).await,
 
         Commands::Status => wiki::status::run(),
 
@@ -354,12 +359,13 @@ pub async fn run() -> Result<()> {
             if !wiki_dir.exists() {
                 bail!("No .wiki/ found. Run `codefidence init` first.");
             }
+            let wiki_config = wiki::config::load(wiki_dir);
             let scan_result = init::scan::run()?;
             let candidates = init::candidates::generate(&scan_result.domains);
             if candidates.is_empty() {
                 ui::info("No memory candidates detected from scan.");
             } else {
-                init::candidates::write_candidates_file(wiki_dir, &candidates)?;
+                init::candidates::write_candidates_file(wiki_dir, &candidates, &wiki_config.language)?;
                 ui::success(&format!(
                     "{} memory candidate(s) written to .wiki/_candidates.md",
                     candidates.len()

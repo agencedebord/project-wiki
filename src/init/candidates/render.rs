@@ -4,20 +4,24 @@ use std::path::Path;
 use anyhow::{Context, Result};
 
 use super::Candidate;
+use crate::i18n::t;
 
 /// Format candidates into a markdown file.
-pub fn format_candidates_markdown(candidates: &[Candidate]) -> String {
+pub fn format_candidates_markdown(candidates: &[Candidate], lang: &str) -> String {
+    let intro = t("candidates_intro", lang);
+    let intro_lines: Vec<String> = intro.lines().map(|l| {
+        if l.starts_with('>') { l.to_string() } else { format!("> {}", l) }
+    }).collect();
+
     let mut lines = vec![
-        "# Memory Candidates".to_string(),
+        format!("# {}", t("memory_candidates", lang)),
         String::new(),
-        "> Auto-generated proposals to confirm, reject, or reformulate.".to_string(),
-        "> These candidates are not yet confirmed memory.".to_string(),
-        "> Edit this file or use `codefidence promote <id>` to validate.".to_string(),
     ];
+    lines.extend(intro_lines);
 
     if candidates.is_empty() {
         lines.push(String::new());
-        lines.push("No candidates detected.".to_string());
+        lines.push(t("no_candidates", lang).to_string());
         return lines.join("\n");
     }
 
@@ -55,7 +59,7 @@ pub fn format_candidates_markdown(candidates: &[Candidate]) -> String {
 
 /// Write the _candidates.md file to disk.
 /// If the file already exists, preserves candidates that have been processed (non-pending).
-pub fn write_candidates_file(wiki_dir: &Path, candidates: &[Candidate]) -> Result<()> {
+pub fn write_candidates_file(wiki_dir: &Path, candidates: &[Candidate], lang: &str) -> Result<()> {
     let path = wiki_dir.join("_candidates.md");
 
     if candidates.is_empty() {
@@ -83,7 +87,7 @@ pub fn write_candidates_file(wiki_dir: &Path, candidates: &[Candidate]) -> Resul
 
     // Generate the full file with new candidates
     let owned: Vec<Candidate> = new_candidates.into_iter().cloned().collect();
-    let content = format_candidates_markdown(&owned);
+    let content = format_candidates_markdown(&owned, lang);
     std::fs::write(&path, &content)
         .with_context(|| format!("Failed to write {}", path.display()))?;
 

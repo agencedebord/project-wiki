@@ -1,5 +1,6 @@
 use std::collections::HashSet;
 
+use crate::i18n::t;
 use crate::init::analyze::LlmAnalysis;
 use crate::wiki::common::capitalize;
 
@@ -12,6 +13,7 @@ pub fn generate_domain_overview(
     domain: &DomainInfo,
     all_domains: &[DomainInfo],
     analysis: Option<&LlmAnalysis>,
+    lang: &str,
 ) -> String {
     let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
     let title = capitalize(&domain.name);
@@ -37,8 +39,8 @@ pub fn generate_domain_overview(
 
         // Title + description
         sections.push(format!(
-            "# {}\n\n## What this domain does\n{} `[llm-analyzed]`",
-            title, analysis.description
+            "# {}\n\n## {}\n{} `[llm-analyzed]`",
+            title, t("what_this_domain_does", lang), analysis.description
         ));
 
         // Key behaviors
@@ -49,7 +51,7 @@ pub fn generate_domain_overview(
                 .map(|b| format!("- **{}**: {} `[llm-analyzed]`", b.summary, b.detail))
                 .collect::<Vec<_>>()
                 .join("\n");
-            sections.push(format!("## Key behaviors\n{}", list));
+            sections.push(format!("## {}\n{}", t("key_behaviors", lang), list));
         }
 
         // Domain interactions
@@ -66,7 +68,7 @@ pub fn generate_domain_overview(
                 })
                 .collect::<Vec<_>>()
                 .join("\n");
-            sections.push(format!("## Domain interactions\n{}", list));
+            sections.push(format!("## {}\n{}", t("domain_interactions", lang), list));
         }
 
         // Gotchas and edge cases
@@ -77,19 +79,20 @@ pub fn generate_domain_overview(
                 .map(|g| format!("- {} `[llm-analyzed]`", g))
                 .collect::<Vec<_>>()
                 .join("\n");
-            sections.push(format!("## Gotchas and edge cases\n{}", list));
+            sections.push(format!("## {}\n{}", t("gotchas", lang), list));
         }
     } else {
         // ─── Structural fallback (no LLM) ───
         let mut fallback = format!(
-            "# {}\n\n## Description\nLLM analysis was not available for this domain. `[inferred]`",
-            title
+            "# {}\n\n## {}\n{} `[inferred]`",
+            title, t("description", lang), t("llm_not_available", lang)
         );
 
         // Include structural signals so the overview is not completely empty
         if !domain.models.is_empty() {
             fallback.push_str(&format!(
-                "\n\n## Detected models\n{}",
+                "\n\n## {}\n{}",
+                t("detected_models", lang),
                 domain
                     .models
                     .iter()
@@ -100,7 +103,8 @@ pub fn generate_domain_overview(
         }
         if !domain.routes.is_empty() {
             fallback.push_str(&format!(
-                "\n\n## Detected routes\n{}",
+                "\n\n## {}\n{}",
+                t("detected_routes", lang),
                 domain
                     .routes
                     .iter()
@@ -115,7 +119,7 @@ pub fn generate_domain_overview(
 
     // Notes from code (TODO/FIXME/HACK/NOTE) — always included if present
     if let Some(s) =
-        format_list_section_opt("Notes from code", &domain.comments, |c| format!("- {}", c))
+        format_list_section_opt(t("notes_from_code", lang), &domain.comments, |c| format!("- {}", c))
     {
         sections.push(s);
     }
@@ -128,7 +132,7 @@ pub fn generate_domain_overview(
             .map(|d| format!("- [{}](../{d}/_overview.md)", capitalize(d), d = d))
             .collect::<Vec<_>>()
             .join("\n");
-        sections.push(format!("## Dependencies\n{}", deps_list));
+        sections.push(format!("## {}\n{}", t("dependencies", lang), deps_list));
     }
 
     // Referenced by (always included if present)
@@ -149,14 +153,14 @@ pub fn generate_domain_overview(
             })
             .collect::<Vec<_>>()
             .join("\n");
-        sections.push(format!("## Referenced by\n{}", refs_list));
+        sections.push(format!("## {}\n{}", t("referenced_by", lang), refs_list));
     }
 
     sections.join("\n\n")
 }
 
 /// Generate a Mermaid dependency graph.
-pub fn generate_graph(domains: &[DomainInfo]) -> String {
+pub fn generate_graph(domains: &[DomainInfo], lang: &str) -> String {
     let mut mermaid_lines = Vec::new();
 
     for domain in domains {
@@ -197,20 +201,22 @@ pub fn generate_graph(domains: &[DomainInfo]) -> String {
     };
 
     format!(
-        "# Domain dependency graph\n\n\
-         > Auto-generated from codebase scan. Do not edit manually.\n\n\
+        "# {}\n\n\
+         > {}\n\n\
          ```mermaid\n\
          graph LR\n\
          {}\n\
          ```\n",
+        t("dependency_graph", lang),
+        t("auto_generated_scan", lang),
         graph_body
     )
 }
 
 /// Generate the _index.md content.
-pub fn generate_index(domains: &[DomainInfo], date: &str) -> String {
+pub fn generate_index(domains: &[DomainInfo], date: &str, lang: &str) -> String {
     let domain_list = if domains.is_empty() {
-        "_No domains documented yet._".to_string()
+        t("no_domains_yet", lang).to_string()
     } else {
         domains
             .iter()
@@ -227,20 +233,26 @@ pub fn generate_index(domains: &[DomainInfo], date: &str) -> String {
 
     format!(
         "# Codefidence\n\n\
-         > Auto-generated knowledge base. Managed by [codefidence](https://github.com/agencedebord/codefidence).\n\n\
-         ## Domains\n\n\
+         > {} [codefidence](https://github.com/agencedebord/codefidence).\n\n\
+         ## {}\n\n\
          {}\n\n\
-         ## Recent decisions\n\n\
+         ## {}\n\n\
          | Date | Decision | Domain |\n\
          |------|----------|--------|\n\n\
-         ## Last updated\n\n\
-         - Initialized on {}\n",
-        domain_list, date
+         ## {}\n\n\
+         - {} {}\n",
+        t("auto_generated_kb", lang),
+        t("domains", lang),
+        domain_list,
+        t("recent_decisions", lang),
+        t("last_updated", lang),
+        t("initialized_on", lang),
+        date
     )
 }
 
 /// Generate the _needs-review.md content.
-pub fn generate_needs_review(domains: &[DomainInfo]) -> String {
+pub fn generate_needs_review(domains: &[DomainInfo], lang: &str) -> String {
     let mut questions: Vec<String> = Vec::new();
 
     for domain in domains {
@@ -250,20 +262,24 @@ pub fn generate_needs_review(domains: &[DomainInfo]) -> String {
     }
 
     let questions_section = if questions.is_empty() {
-        "_No open questions found._".to_string()
+        t("no_open_questions", lang).to_string()
     } else {
         questions.join("\n")
     };
 
     format!(
-        "# Needs review\n\n\
-         > Items below were generated automatically and need human validation.\n\
-         > Answer or validate each item, then remove it from this list.\n\n\
-         ## Open questions\n\n\
+        "# {}\n\n\
+         > {}\n\n\
+         ## {}\n\n\
          {}\n\n\
-         ## Unresolved contradictions\n\n\
-         _None detected._\n",
-        questions_section
+         ## {}\n\n\
+         {}\n",
+        t("needs_review", lang),
+        t("needs_review_intro", lang),
+        t("open_questions", lang),
+        questions_section,
+        t("unresolved_contradictions", lang),
+        t("none_detected", lang),
     )
 }
 
@@ -344,7 +360,7 @@ mod tests {
         let domain = domain_with_signal();
         let analysis = sample_analysis();
         let overview =
-            generate_domain_overview(&domain, std::slice::from_ref(&domain), Some(&analysis));
+            generate_domain_overview(&domain, std::slice::from_ref(&domain), Some(&analysis), "en");
 
         assert!(overview.contains("## What this domain does"));
         assert!(overview.contains("Handles billing operations"));
@@ -363,7 +379,7 @@ mod tests {
         let domain = domain_with_signal();
         let analysis = sample_analysis();
         let overview =
-            generate_domain_overview(&domain, std::slice::from_ref(&domain), Some(&analysis));
+            generate_domain_overview(&domain, std::slice::from_ref(&domain), Some(&analysis), "en");
 
         assert!(
             !overview.contains("## Data models"),
@@ -386,7 +402,7 @@ mod tests {
     #[test]
     fn generate_overview_without_analysis_fallback() {
         let domain = domain_with_signal();
-        let overview = generate_domain_overview(&domain, std::slice::from_ref(&domain), None);
+        let overview = generate_domain_overview(&domain, std::slice::from_ref(&domain), None, "en");
 
         assert!(overview.contains("confidence: inferred"));
         assert!(overview.contains("LLM analysis was not available"));
@@ -412,7 +428,7 @@ mod tests {
             memory_candidates: vec![],
         };
         let overview =
-            generate_domain_overview(&domain, std::slice::from_ref(&domain), Some(&analysis));
+            generate_domain_overview(&domain, std::slice::from_ref(&domain), Some(&analysis), "en");
 
         assert!(overview.contains("## What this domain does"));
         assert!(
@@ -461,7 +477,7 @@ mod tests {
             gotchas: vec![],
             memory_candidates: vec![],
         };
-        let overview = generate_domain_overview(&billing, &all, Some(&analysis));
+        let overview = generate_domain_overview(&billing, &all, Some(&analysis), "en");
 
         assert!(overview.contains("## Dependencies"));
         assert!(overview.contains("[Users](../users/_overview.md)"));
@@ -481,7 +497,7 @@ mod tests {
             test_files: vec![],
         }];
 
-        let index = generate_index(&domains, "2025-01-01");
+        let index = generate_index(&domains, "2025-01-01", "en");
         assert!(index.contains("Billing"));
         assert!(index.contains("domains/billing/_overview.md"));
         // No file/model counts in index anymore
@@ -503,7 +519,7 @@ mod tests {
             test_files: vec![],
         }];
 
-        let graph = generate_graph(&domains);
+        let graph = generate_graph(&domains, "en");
         assert!(graph.contains("billing"));
         assert!(graph.contains("mermaid"));
     }
@@ -531,7 +547,7 @@ mod tests {
             },
         ];
 
-        let graph = generate_graph(&domains);
+        let graph = generate_graph(&domains, "en");
         assert!(graph.contains("billing --> users"));
     }
 
@@ -547,7 +563,7 @@ mod tests {
             test_files: vec![],
         }];
 
-        let review = generate_needs_review(&domains);
+        let review = generate_needs_review(&domains, "en");
         assert!(review.contains("Fix invoice calculation"));
         assert!(review.contains("Billing"));
     }
@@ -564,7 +580,90 @@ mod tests {
             test_files: vec![],
         }];
 
-        let review = generate_needs_review(&domains);
+        let review = generate_needs_review(&domains, "en");
         assert!(review.contains("No open questions found"));
+    }
+
+    // ─── French output tests ───
+
+    #[test]
+    fn generate_overview_french_headers() {
+        let domain = domain_with_signal();
+        let analysis = sample_analysis();
+        let overview =
+            generate_domain_overview(&domain, std::slice::from_ref(&domain), Some(&analysis), "fr");
+
+        assert!(overview.contains("## Ce que fait ce domaine"));
+        assert!(overview.contains("## Comportements clés"));
+        assert!(overview.contains("## Interactions avec d'autres domaines"));
+        assert!(overview.contains("## Pièges et cas limites"));
+        assert!(!overview.contains("## What this domain does"));
+        assert!(!overview.contains("## Key behaviors"));
+    }
+
+    #[test]
+    fn generate_overview_french_fallback() {
+        let domain = domain_with_signal();
+        let overview =
+            generate_domain_overview(&domain, std::slice::from_ref(&domain), None, "fr");
+
+        assert!(overview.contains("## Description"));
+        assert!(overview.contains("L'analyse LLM"));
+    }
+
+    #[test]
+    fn generate_index_french() {
+        let domains = vec![DomainInfo {
+            name: "billing".to_string(),
+            files: vec!["a.ts".to_string()],
+            dependencies: vec![],
+            models: vec![],
+            routes: vec![],
+            comments: vec![],
+            test_files: vec![],
+        }];
+
+        let index = generate_index(&domains, "2025-01-01", "fr");
+        assert!(index.contains("## Domaines"));
+        assert!(index.contains("## Décisions récentes"));
+        assert!(index.contains("## Dernière mise à jour"));
+        assert!(index.contains("Initialisé le"));
+        assert!(!index.contains("## Domains"));
+    }
+
+    #[test]
+    fn generate_graph_french() {
+        let domains = vec![DomainInfo {
+            name: "billing".to_string(),
+            files: vec![],
+            dependencies: vec![],
+            models: vec![],
+            routes: vec![],
+            comments: vec![],
+            test_files: vec![],
+        }];
+
+        let graph = generate_graph(&domains, "fr");
+        assert!(graph.contains("Graphe de dépendances des domaines"));
+        assert!(!graph.contains("Domain dependency graph"));
+    }
+
+    #[test]
+    fn generate_needs_review_french() {
+        let domains = vec![DomainInfo {
+            name: "billing".to_string(),
+            files: vec![],
+            dependencies: vec![],
+            models: vec![],
+            routes: vec![],
+            comments: vec!["[TODO] Fix calculation".to_string()],
+            test_files: vec![],
+        }];
+
+        let review = generate_needs_review(&domains, "fr");
+        assert!(review.contains("À vérifier"));
+        assert!(review.contains("Questions ouvertes"));
+        assert!(review.contains("Contradictions non résolues"));
+        assert!(!review.contains("Needs review"));
     }
 }

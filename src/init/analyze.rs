@@ -69,6 +69,7 @@ pub fn run(
     domains: &[DomainInfo],
     all_domains: &[DomainInfo],
     _wiki_dir: &Path,
+    language: &str,
 ) -> Result<Vec<(String, LlmAnalysis)>> {
     ensure_claude_available()?;
 
@@ -79,7 +80,7 @@ pub fn run(
         let progress = (i + 1) as f64 / total as f64;
         ui::llm_progress(&format!("Analyzing {}...", domain.name), progress);
 
-        match analyze_domain(domain, all_domains) {
+        match analyze_domain(domain, all_domains, language) {
             Ok(analysis) => {
                 results.push((domain.name.clone(), analysis));
             }
@@ -156,12 +157,12 @@ fn ensure_claude_available() -> Result<()> {
 
 // ─── Domain analysis ───
 
-fn analyze_domain(domain: &DomainInfo, all_domains: &[DomainInfo]) -> Result<LlmAnalysis> {
+fn analyze_domain(domain: &DomainInfo, all_domains: &[DomainInfo], language: &str) -> Result<LlmAnalysis> {
     let snippets = collect_file_snippets(domain);
     if snippets.is_empty() {
         bail!("No source files available to analyze");
     }
-    let prompt = build_prompt(domain, all_domains, &snippets);
+    let prompt = build_prompt(domain, all_domains, &snippets, language);
     let mut response = call_claude(&prompt)?;
     validate_response(&mut response);
     Ok(response)
@@ -409,6 +410,7 @@ fn build_prompt(
     domain: &DomainInfo,
     all_domains: &[DomainInfo],
     snippets: &[FileSnippet],
+    language: &str,
 ) -> String {
     let deps_str = if domain.dependencies.is_empty() {
         "none".to_string()
@@ -478,7 +480,9 @@ Analyze the source code above and produce documentation. Focus on:
 
 DO NOT list models, routes, or file counts — the reader can see those in code.
 DO NOT describe what the code "contains" — describe what it DOES and WHY.
-Be factual. Only document what the code evidence supports. If something is unclear, say so."#,
+Be factual. Only document what the code evidence supports. If something is unclear, say so.
+
+IMPORTANT: Write ALL text content in {language_name}. Every description, behavior detail, interaction description, and gotcha MUST be in {language_name}."#,
         domain = domain.name,
         deps = deps_str,
         referenced_by = referenced_by_str,
@@ -486,6 +490,7 @@ Be factual. Only document what the code evidence supports. If something is uncle
         routes = routes_str,
         comments = comments_str,
         snippets = snippets_str,
+        language_name = crate::i18n::language_name(language),
     )
 }
 
@@ -705,7 +710,7 @@ mod tests {
             content: "pub fn get_user() {}".to_string(),
         }];
 
-        let prompt = build_prompt(&domain, &all_domains, &snippets);
+        let prompt = build_prompt(&domain, &all_domains, &snippets, "en");
         assert!(prompt.contains("Referenced by"));
         assert!(prompt.contains("billing"));
     }

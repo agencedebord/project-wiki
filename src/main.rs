@@ -1,4 +1,5 @@
 mod cli;
+mod i18n;
 mod init;
 mod ui;
 mod verbosity;

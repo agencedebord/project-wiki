@@ -5,6 +5,7 @@ use anyhow::{Context, Result};
 use chrono::Utc;
 use serde::Serialize;
 
+use crate::i18n::t;
 use crate::ui;
 use crate::wiki::common;
 use crate::wiki::common::capitalize;
@@ -96,18 +97,20 @@ pub fn run() -> Result<()> {
         })
         .count();
 
+    let lang = &wiki_config.language;
+
     // ─── Build output ───
     let mut output = String::new();
 
     output.push_str("# Codefidence\n\n");
-    output.push_str("> Auto-generated. Do not edit manually.\n");
-    output.push_str(&format!("> Last updated: {}\n", date));
+    output.push_str(&format!("> {}\n", t("auto_generated_index", lang)));
+    output.push_str(&format!("> {} {}\n", t("last_updated", lang), date));
 
     // Domains section
-    output.push_str("\n## Domains\n");
+    output.push_str(&format!("\n## {}\n", t("domains", lang)));
 
     if domain_sections.is_empty() {
-        output.push_str("\n_No domains documented yet._\n");
+        output.push_str(&format!("\n{}\n", t("no_domains_yet", lang)));
     } else {
         for (domain_name, note_lines) in &domain_sections {
             let title = capitalize(domain_name);
@@ -119,9 +122,9 @@ pub fn run() -> Result<()> {
     }
 
     // Decisions section
-    output.push_str("\n## Decisions\n\n");
+    output.push_str(&format!("\n## {}\n\n", t("decisions", lang)));
     if decisions.is_empty() {
-        output.push_str("_No decisions recorded yet._\n");
+        output.push_str(&format!("{}\n", t("no_decisions_yet", lang)));
     } else {
         output.push_str("| Date | Decision | Domain |\n");
         output.push_str("|------|----------|--------|\n");
@@ -134,7 +137,7 @@ pub fn run() -> Result<()> {
     }
 
     // Health section
-    output.push_str("\n## Health\n\n");
+    output.push_str(&format!("\n## {}\n\n", t("health", lang)));
     output.push_str(&format!("- Total notes: {}\n", total));
     if total > 0 {
         output.push_str(&format!(

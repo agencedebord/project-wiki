@@ -3,12 +3,10 @@ use std::path::Path;
 
 use anyhow::{Context, Result, bail};
 
+use crate::i18n::t;
 use crate::init::patch_claude;
 use crate::ui;
 
-const INDEX_TEMPLATE: &str = include_str!("../templates/index.md");
-const GRAPH_TEMPLATE: &str = include_str!("../templates/graph.md");
-const NEEDS_REVIEW_TEMPLATE: &str = include_str!("../templates/needs_review.md");
 const ENV_EXAMPLE: &str = include_str!("../templates/env_example");
 const DOMAIN_OVERVIEW_TEMPLATE: &str = include_str!("../templates/domain_overview.md");
 const DECISION_TEMPLATE: &str = include_str!("../templates/decision.md");
@@ -19,7 +17,7 @@ const WIKI_ADD_CONTEXT_CMD: &str = include_str!("../templates/commands/wiki_add_
 const WIKI_ADD_DECISION_CMD: &str = include_str!("../templates/commands/wiki_add_decision.md");
 const WIKI_CHECK_WORKFLOW: &str = include_str!("../templates/wiki-check.yml");
 
-pub fn run() -> Result<()> {
+pub fn run(language: &str) -> Result<()> {
     let wiki_dir = Path::new(".wiki");
 
     if wiki_dir.exists() {
@@ -40,13 +38,56 @@ pub fn run() -> Result<()> {
     fs::create_dir_all(".wiki/domains").context("Failed to create .wiki/domains directory")?;
     fs::create_dir_all(".wiki/decisions").context("Failed to create .wiki/decisions directory")?;
 
-    // Write template files
+    // Write template files (translated)
     ui::step("Writing wiki templates...");
     let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
-    let index_content = INDEX_TEMPLATE.replace("{date}", &date);
+
+    let index_content = format!(
+        "# Codefidence\n\n\
+         > {} [codefidence](https://github.com/agencedebord/codefidence).\n\n\
+         ## {}\n\n\
+         {}\n\n\
+         ## {}\n\n\
+         | Date | Decision | Domain |\n\
+         |------|----------|--------|\n\n\
+         ## {}\n\n\
+         - {} {}\n",
+        t("auto_generated_kb", language),
+        t("domains", language),
+        t("no_domains_yet", language),
+        t("recent_decisions", language),
+        t("last_updated", language),
+        t("initialized_on", language),
+        date
+    );
     fs::write(".wiki/_index.md", index_content).context("Failed to write _index.md")?;
-    fs::write(".wiki/_graph.md", GRAPH_TEMPLATE).context("Failed to write _graph.md")?;
-    fs::write(".wiki/_needs-review.md", NEEDS_REVIEW_TEMPLATE)
+
+    let graph_content = format!(
+        "# {}\n\n\
+         > {}\n\n\
+         ```mermaid\n\
+         graph LR\n\
+         %% No domains yet\n\
+         ```\n",
+        t("dependency_graph", language),
+        t("auto_generated_scan", language),
+    );
+    fs::write(".wiki/_graph.md", graph_content).context("Failed to write _graph.md")?;
+
+    let needs_review_content = format!(
+        "# {}\n\n\
+         > {}\n\n\
+         ## {}\n\n\
+         _No open questions yet._\n\n\
+         ## {}\n\n\
+         {}\n",
+        t("needs_review", language),
+        t("needs_review_intro", language),
+        t("open_questions", language),
+        t("unresolved_contradictions", language),
+        t("none_detected", language),
+    );
+    fs::write(".wiki/_needs-review.md", needs_review_content)
         .context("Failed to write _needs-review.md")?;
     fs::write(".wiki/.env.example", ENV_EXAMPLE).context("Failed to write .env.example")?;
     fs::write(
@@ -60,7 +101,10 @@ pub fn run() -> Result<()> {
     // Write default config
     fs::write(
         ".wiki/config.toml",
-        "# codefidence configuration\n# staleness_days = 30\n# auto_index = true\n",
+        format!(
+            "# codefidence configuration\n# staleness_days = 30\n# auto_index = true\nlanguage = \"{}\"\n",
+            language
+        ),
     )
     .context("Failed to write config.toml")?;
 

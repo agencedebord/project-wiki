@@ -5,6 +5,8 @@ use std::path::Path;
 pub struct WikiConfig {
     pub staleness_days: u32,
     pub auto_index: bool,
+    /// Language for generated wiki content ("en", "fr", etc.). Default: "en".
+    pub language: String,
 }
 
 impl Default for WikiConfig {
@@ -12,6 +14,7 @@ impl Default for WikiConfig {
         Self {
             staleness_days: 30,
             auto_index: true,
+            language: "en".to_string(),
         }
     }
 }
@@ -38,6 +41,9 @@ pub fn load(wiki_dir: &Path) -> WikiConfig {
                     "auto_index" => {
                         config.auto_index = value == "true";
                     }
+                    "language" => {
+                        config.language = value.to_string();
+                    }
                     _ => {} // ignore unknown keys
                 }
             }
@@ -58,6 +64,7 @@ mod tests {
         let config = WikiConfig::default();
         assert_eq!(config.staleness_days, 30);
         assert!(config.auto_index);
+        assert_eq!(config.language, "en");
     }
 
     #[test]
@@ -76,10 +83,12 @@ mod tests {
         writeln!(f, "# codefidence configuration").unwrap();
         writeln!(f, "staleness_days = 60").unwrap();
         writeln!(f, "auto_index = false").unwrap();
+        writeln!(f, "language = \"fr\"").unwrap();
 
         let config = load(dir.path());
         assert_eq!(config.staleness_days, 60);
         assert!(!config.auto_index);
+        assert_eq!(config.language, "fr");
     }
 
     #[test]
