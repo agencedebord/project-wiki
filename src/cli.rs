@@ -240,6 +240,10 @@ enum Commands {
         /// Branch flag (for post-checkout: 1=branch switch, 0=file checkout)
         #[arg(long)]
         branch_flag: Option<u8>,
+
+        /// Rewrite cause (for post-rewrite: "rebase" or "amend")
+        #[arg(long)]
+        rewrite_cause: Option<String>,
     },
 }
 
@@ -423,6 +427,13 @@ pub async fn run() -> Result<()> {
             old_ref,
             new_ref,
             branch_flag,
-        } => wiki::git_hook::run(&event, old_ref.as_deref(), new_ref.as_deref(), branch_flag),
+            rewrite_cause,
+        } => wiki::git_hook::run(
+            &event,
+            old_ref.as_deref(),
+            new_ref.as_deref(),
+            branch_flag,
+            rewrite_cause.as_deref(),
+        ),
     }
 }

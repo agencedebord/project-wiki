@@ -20,7 +20,7 @@ const HOOKS: &[(&str, &str)] = &[
     ),
     (
         "post-rewrite",
-        "codefidence git-hook --event post-rewrite 2>/dev/null || true",
+        "codefidence git-hook --event post-rewrite --rewrite-cause \"$1\" 2>/dev/null || true",
     ),
     (
         "post-checkout",
@@ -49,6 +49,9 @@ pub fn install(project_root: &Path) -> Result<()> {
         install_one_hook(&hooks_dir, hook_name, command)
             .with_context(|| format!("Failed to install {} hook", hook_name))?;
     }
+
+    // Ensure .drift-pending is in .gitignore (important for standalone install-hooks)
+    ensure_gitignore_entry(project_root);
 
     ui::success("Git hooks installed.");
     for (hook_name, _) in HOOKS {
@@ -85,6 +88,29 @@ pub fn uninstall(project_root: &Path) -> Result<()> {
     }
 
     Ok(())
+}
+
+// ─── Gitignore ───
+
+/// Ensure `.wiki/.drift-pending` is listed in `.gitignore`.
+/// Best-effort: does not fail if `.gitignore` cannot be written.
+fn ensure_gitignore_entry(project_root: &Path) {
+    let entry = ".wiki/.drift-pending";
+    let gitignore_path = project_root.join(".gitignore");
+
+    let content = fs::read_to_string(&gitignore_path).unwrap_or_default();
+    if content.lines().any(|line| line.trim() == entry) {
+        return; // already present
+    }
+
+    let mut new_content = content;
+    if !new_content.ends_with('\n') && !new_content.is_empty() {
+        new_content.push('\n');
+    }
+    new_content.push_str(entry);
+    new_content.push('\n');
+
+    let _ = fs::write(&gitignore_path, new_content);
 }
 
 // ─── Helpers ───

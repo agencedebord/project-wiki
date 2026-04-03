@@ -19,7 +19,6 @@ pub struct DriftPending {
     pub timestamp: String,
     pub domains: Vec<String>,
     pub untracked_files: Vec<String>,
-    pub files_changed: usize,
 }
 
 /// Entry point for `codefidence git-hook --event <event>`.
@@ -28,6 +27,7 @@ pub fn run(
     old_ref: Option<&str>,
     new_ref: Option<&str>,
     branch_flag: Option<u8>,
+    rewrite_cause: Option<&str>,
 ) -> Result<()> {
     // post-checkout fires on every file checkout too; only trigger on branch switches
     if event == "post-checkout" && branch_flag != Some(1) {
@@ -46,7 +46,7 @@ pub fn run(
     };
 
     // Get changed files from git
-    let changed_files = match get_changed_files(event, old_ref, new_ref) {
+    let changed_files = match get_changed_files(event, old_ref, new_ref, rewrite_cause) {
         Ok(files) => files,
         Err(_) => return Ok(()), // ORIG_HEAD missing or git error — silent skip
     };
@@ -64,15 +64,12 @@ pub fn run(
     // Resolve each file to a domain or flag as untracked
     let mut domains = BTreeSet::new();
     let mut untracked_files = Vec::new();
-    let mut relevant_count: usize = 0;
 
     for file in &changed_files {
         // Skip wiki files and common non-code files
         if should_skip(file) {
             continue;
         }
-
-        relevant_count += 1;
 
         match file_index::resolve_domain(&index, file, &project_root) {
             Some(domain) => {
@@ -94,13 +91,7 @@ pub fn run(
     print_warning(event, &domains_vec, &untracked_files);
 
     // Write (or merge into) .drift-pending
-    write_drift_pending(
-        &wiki_dir,
-        event,
-        &domains_vec,
-        &untracked_files,
-        relevant_count,
-    )?;
+    write_drift_pending(&wiki_dir, event, &domains_vec, &untracked_files)?;
 
     Ok(())
 }
@@ -125,6 +116,7 @@ fn get_changed_files(
     event: &str,
     old_ref: Option<&str>,
     new_ref: Option<&str>,
+    rewrite_cause: Option<&str>,
 ) -> Result<Vec<String>> {
     let output = match event {
         "post-merge" => Command::new("git")
@@ -139,11 +131,20 @@ fn get_changed_files(
             .output()
             .context("Failed to run git diff-tree for post-merge")?,
 
-        // post-rewrite is called by git after rebase or amend with $1 = "rebase" or "amend"
-        "post-rewrite" => Command::new("git")
-            .args(["diff", "--name-only", "ORIG_HEAD", "HEAD"])
-            .output()
-            .context("Failed to run git diff for post-rewrite")?,
+        // post-rewrite is called by git after rebase or amend.
+        // For rebase: ORIG_HEAD is set reliably by git.
+        // For amend: ORIG_HEAD may not be set, so we fall back to HEAD~1.
+        "post-rewrite" => {
+            let base_ref = if rewrite_cause == Some("amend") {
+                "HEAD~1"
+            } else {
+                "ORIG_HEAD"
+            };
+            Command::new("git")
+                .args(["diff", "--name-only", base_ref, "HEAD"])
+                .output()
+                .context("Failed to run git diff for post-rewrite")?
+        }
 
         "post-checkout" => {
             let old = old_ref.unwrap_or("HEAD@{1}");
@@ -265,14 +266,12 @@ fn write_drift_pending(
     event: &str,
     domains: &[String],
     untracked_files: &[String],
-    files_changed: usize,
 ) -> Result<()> {
     let path = wiki_dir.join(DRIFT_PENDING_FILE);
 
-    // Merge with existing pending data if present
+    // Merge with existing pending data if present (domains and files are deduplicated)
     let mut all_domains: BTreeSet<String> = domains.iter().cloned().collect();
     let mut all_untracked: BTreeSet<String> = untracked_files.iter().cloned().collect();
-    let mut total_files = files_changed;
 
     if let Some(existing) = read_drift_pending(wiki_dir) {
         for d in existing.domains {
@@ -281,7 +280,6 @@ fn write_drift_pending(
         for f in existing.untracked_files {
             all_untracked.insert(f);
         }
-        total_files += existing.files_changed;
     }
 
     let pending = DriftPending {
@@ -289,7 +287,6 @@ fn write_drift_pending(
         timestamp: Utc::now().to_rfc3339(),
         domains: all_domains.into_iter().collect(),
         untracked_files: all_untracked.into_iter().collect(),
-        files_changed: total_files,
     };
 
     let json =
@@ -341,7 +338,6 @@ mod tests {
             "post-merge",
             &["billing".to_string(), "auth".to_string()],
             &["src/new-module/handler.ts".to_string()],
-            5,
         )
         .unwrap();
 
@@ -349,7 +345,6 @@ mod tests {
         assert_eq!(pending.event, "post-merge");
         assert_eq!(pending.domains, vec!["auth", "billing"]); // sorted by BTreeSet
         assert_eq!(pending.untracked_files, vec!["src/new-module/handler.ts"]);
-        assert_eq!(pending.files_changed, 5);
     }
 
     #[test]
@@ -364,7 +359,6 @@ mod tests {
             "post-merge",
             &["billing".to_string()],
             &["src/new.ts".to_string()],
-            3,
         )
         .unwrap();
 
@@ -374,7 +368,6 @@ mod tests {
             "post-commit",
             &["auth".to_string(), "billing".to_string()],
             &["src/other.ts".to_string()],
-            2,
         )
         .unwrap();
 
@@ -382,7 +375,6 @@ mod tests {
         assert_eq!(pending.event, "post-commit"); // latest event
         assert_eq!(pending.domains, vec!["auth", "billing"]); // merged + deduped
         assert_eq!(pending.untracked_files, vec!["src/new.ts", "src/other.ts"]); // merged
-        assert_eq!(pending.files_changed, 5); // summed
     }
 
     #[test]
@@ -391,7 +383,7 @@ mod tests {
         let wiki_dir = dir.path().join(".wiki");
         fs::create_dir_all(&wiki_dir).unwrap();
 
-        write_drift_pending(&wiki_dir, "post-merge", &["billing".to_string()], &[], 1).unwrap();
+        write_drift_pending(&wiki_dir, "post-merge", &["billing".to_string()], &[]).unwrap();
         assert!(read_drift_pending(&wiki_dir).is_some());
 
         consume_drift_pending(&wiki_dir);
