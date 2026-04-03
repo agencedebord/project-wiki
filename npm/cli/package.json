@@ -1,5 +1,5 @@
 {
-  "name": "@codefidence/cli",
+  "name": "@agence-debord/codefidence",
   "version": "0.1.0",
   "description": "Auto-managed project knowledge wiki for AI-assisted development",
   "license": "MIT",
@@ -12,10 +12,10 @@
   },
   "files": ["bin"],
   "optionalDependencies": {
-    "@codefidence/darwin-arm64": "0.1.0",
-    "@codefidence/darwin-x64": "0.1.0",
-    "@codefidence/linux-x64": "0.1.0",
-    "@codefidence/linux-arm64": "0.1.0",
-    "@codefidence/win32-x64": "0.1.0"
+    "@agence-debord/codefidence-darwin-arm64": "0.1.0",
+    "@agence-debord/codefidence-darwin-x64": "0.1.0",
+    "@agence-debord/codefidence-linux-x64": "0.1.0",
+    "@agence-debord/codefidence-linux-arm64": "0.1.0",
+    "@agence-debord/codefidence-win32-x64": "0.1.0"
   }
 }

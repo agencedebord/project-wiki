@@ -1,5 +1,5 @@
 {
-  "name": "@codefidence/win32-x64",
+  "name": "@agence-debord/codefidence-win32-x64",
   "version": "0.1.0",
   "description": "codefidence binary for Windows x64",
   "license": "MIT",

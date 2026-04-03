@@ -1,5 +1,5 @@
 {
-  "name": "@codefidence/linux-x64",
+  "name": "@agence-debord/codefidence-linux-x64",
   "version": "0.1.0",
   "description": "codefidence binary for Linux x64",
   "license": "MIT",

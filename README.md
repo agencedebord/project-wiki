@@ -4,7 +4,7 @@
 
 [![CI](https://github.com/agencedebord/codefidence/actions/workflows/ci.yml/badge.svg)](https://github.com/agencedebord/codefidence/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/codefidence.svg)](https://crates.io/crates/codefidence)
-[![npm](https://img.shields.io/npm/v/@codefidence/cli.svg)](https://www.npmjs.com/package/@codefidence/cli)
+[![npm](https://img.shields.io/npm/v/@agence-debord/codefidence.svg)](https://www.npmjs.com/package/@agence-debord/codefidence)
 [![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue)](LICENSE-MIT)
 [![Rust](https://img.shields.io/badge/rust-1.85%2B-blue)](https://www.rust-lang.org)
 
@@ -33,7 +33,7 @@ These memory items are surfaced at two critical moments:
 
 ```bash
 # Install via npm (recommended — works on macOS, Linux, Windows)
-npm install -g @codefidence/cli
+npm install -g @agence-debord/codefidence
 
 # Or via Homebrew (macOS / Linux)
 brew install agencedebord/tap/codefidence
@@ -261,7 +261,7 @@ This is pre-1.0 software in active development.
 
 ```bash
 # npm (recommended — pre-built binaries, no Rust needed)
-npm install -g @codefidence/cli
+npm install -g @agence-debord/codefidence
 
 # Homebrew (macOS / Linux)
 brew install agencedebord/tap/codefidence

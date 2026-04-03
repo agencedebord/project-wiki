@@ -5,11 +5,11 @@ const path = require("path");
 const fs = require("fs");
 
 const PLATFORMS = {
-  "darwin-arm64": "@codefidence/darwin-arm64",
-  "darwin-x64": "@codefidence/darwin-x64",
-  "linux-x64": "@codefidence/linux-x64",
-  "linux-arm64": "@codefidence/linux-arm64",
-  "win32-x64": "@codefidence/win32-x64",
+  "darwin-arm64": "@agence-debord/codefidence-darwin-arm64",
+  "darwin-x64": "@agence-debord/codefidence-darwin-x64",
+  "linux-x64": "@agence-debord/codefidence-linux-x64",
+  "linux-arm64": "@agence-debord/codefidence-linux-arm64",
+  "win32-x64": "@agence-debord/codefidence-win32-x64",
 };
 
 function getBinaryPath() {
@@ -56,7 +56,7 @@ function getBinaryPath() {
       `Could not find the codefidence binary for ${platform}-${normalizedArch}. ` +
         `Make sure ${pkg} is installed.\n\n` +
         `If you're using npm, try reinstalling with:\n` +
-        `  npm install @codefidence/cli\n\n` +
+        `  npm install @agence-debord/codefidence-cli\n\n` +
         `Original error: ${e.message}`
     );
   }

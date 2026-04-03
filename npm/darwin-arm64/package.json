@@ -1,5 +1,5 @@
 {
-  "name": "@codefidence/darwin-arm64",
+  "name": "@agence-debord/codefidence-darwin-arm64",
   "version": "0.1.0",
   "description": "codefidence binary for macOS ARM64 (Apple Silicon)",
   "license": "MIT",
