@@ -45,7 +45,7 @@ fn show_wiki_overview(wiki_dir: &Path) -> Result<()> {
         let content = fs::read_to_string(&graph_path)?;
         println!("{}", content.trim());
     } else {
-        ui::info("No _graph.md found. Run `codefidence graph` to generate it.");
+        ui::info("No _graph.md found. Run `codefidence rebuild` to generate it.");
     }
 
     Ok(())

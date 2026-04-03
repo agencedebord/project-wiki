@@ -213,7 +213,6 @@ Analyze
 Maintain
   rebuild                    Regenerate graph + index
   index                      Regenerate _index.md and _index.json
-  graph                      Display the dependency graph
 
 Candidates
   generate-candidates        Scan codebase for potential memory items

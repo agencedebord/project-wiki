@@ -73,9 +73,6 @@ enum Commands {
         all: bool,
     },
 
-    /// Display the dependency graph
-    Graph,
-
     /// Search wiki notes
     Search {
         /// Search term
@@ -297,8 +294,6 @@ pub async fn run() -> Result<()> {
         Commands::Validate { strict } => wiki::validate::run(strict),
 
         Commands::Consult { domain, all } => wiki::consult::run(domain.as_deref(), all),
-
-        Commands::Graph => wiki::graph::run(),
 
         Commands::Search { term } => wiki::search::run(&term),
 

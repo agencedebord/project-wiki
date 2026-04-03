@@ -158,4 +158,3 @@ codefidence confirm billing-001
 
 - Read the full [command reference](../README.md#all-commands) in the README
 - Check `.wiki/config.toml` for configuration options (staleness threshold, auto-indexing)
-- Run `codefidence graph` to see domain dependencies

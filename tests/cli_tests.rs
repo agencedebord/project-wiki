@@ -353,19 +353,6 @@ fn rebuild_regenerates_graph_and_index() {
     assert!(graph_after.contains("graph"));
 }
 
-// ─── graph ───
-
-#[test]
-fn graph_fails_without_wiki() {
-    let dir = TempDir::new().unwrap();
-
-    cmd_in(&dir)
-        .arg("graph")
-        .assert()
-        .failure()
-        .stderr(predicate::str::contains("No .wiki/ found"));
-}
-
 // ─── index ───
 
 #[test]
