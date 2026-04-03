@@ -1,7 +1,7 @@
-/// Internationalization support for wiki content generation.
-///
-/// Only the **generated wiki content** is translated (section headers, static text in markdown).
-/// CLI output messages (terminal UI) remain in English.
+//! Internationalization support for wiki content generation.
+//!
+//! Only the **generated wiki content** is translated (section headers, static text in markdown).
+//! CLI output messages (terminal UI) remain in English.
 
 const SUPPORTED_LANGUAGES: &[&str] = &["en", "fr"];
 
