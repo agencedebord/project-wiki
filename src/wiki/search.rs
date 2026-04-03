@@ -103,9 +103,18 @@ pub fn run(term: &str) -> Result<()> {
 fn highlight_term(line: &str, term_lower: &str, _original_term: &str) -> String {
     let line_lower = line.to_lowercase();
 
-    // Fast path: byte lengths match, so byte offsets from the lowercased
-    // string are valid indices into the original string.
-    if line.len() == line_lower.len() {
+    // Fast path: every character keeps the same UTF-8 byte length after
+    // lowercasing, so byte offsets from the lowercased string are valid
+    // indices into the original string.  A simple total-length check is
+    // insufficient because different per-char byte lengths can compensate
+    // (e.g. Ⱥ 2 bytes → ⱥ 3 bytes while another shrinks).
+    let byte_aligned = line.len() == line_lower.len()
+        && line
+            .chars()
+            .zip(line_lower.chars())
+            .all(|(a, b)| a.len_utf8() == b.len_utf8());
+
+    if byte_aligned {
         let mut result = String::new();
         let mut last_end = 0;
 
