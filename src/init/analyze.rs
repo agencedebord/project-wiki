@@ -157,7 +157,11 @@ fn ensure_claude_available() -> Result<()> {
 
 // ─── Domain analysis ───
 
-fn analyze_domain(domain: &DomainInfo, all_domains: &[DomainInfo], language: &str) -> Result<LlmAnalysis> {
+fn analyze_domain(
+    domain: &DomainInfo,
+    all_domains: &[DomainInfo],
+    language: &str,
+) -> Result<LlmAnalysis> {
     let snippets = collect_file_snippets(domain);
     if snippets.is_empty() {
         bail!("No source files available to analyze");

@@ -76,7 +76,10 @@ pub fn uninstall(project_root: &Path) -> Result<()> {
     }
 
     if removed > 0 {
-        ui::success(&format!("Removed codefidence from {} git hook(s).", removed));
+        ui::success(&format!(
+            "Removed codefidence from {} git hook(s).",
+            removed
+        ));
     } else {
         ui::info("No codefidence git hooks found.");
     }
@@ -255,12 +258,10 @@ mod tests {
         create_git_hooks_dir(&dir);
 
         install(dir.path()).unwrap();
-        let content_first =
-            fs::read_to_string(dir.path().join(".git/hooks/post-merge")).unwrap();
+        let content_first = fs::read_to_string(dir.path().join(".git/hooks/post-merge")).unwrap();
 
         install(dir.path()).unwrap();
-        let content_second =
-            fs::read_to_string(dir.path().join(".git/hooks/post-merge")).unwrap();
+        let content_second = fs::read_to_string(dir.path().join(".git/hooks/post-merge")).unwrap();
 
         assert_eq!(content_first, content_second);
 
@@ -325,8 +326,14 @@ mod tests {
         uninstall(dir.path()).unwrap();
 
         let remaining = fs::read_to_string(hooks_dir.join("post-merge")).unwrap();
-        assert!(remaining.contains("echo 'custom'"), "Should keep custom content");
-        assert!(!remaining.contains(START_MARKER), "Should remove codefidence block");
+        assert!(
+            remaining.contains("echo 'custom'"),
+            "Should keep custom content"
+        );
+        assert!(
+            !remaining.contains(START_MARKER),
+            "Should remove codefidence block"
+        );
     }
 
     #[test]

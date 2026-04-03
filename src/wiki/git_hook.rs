@@ -128,7 +128,14 @@ fn get_changed_files(
 ) -> Result<Vec<String>> {
     let output = match event {
         "post-merge" => Command::new("git")
-            .args(["diff-tree", "-r", "--name-only", "--no-commit-id", "ORIG_HEAD", "HEAD"])
+            .args([
+                "diff-tree",
+                "-r",
+                "--name-only",
+                "--no-commit-id",
+                "ORIG_HEAD",
+                "HEAD",
+            ])
             .output()
             .context("Failed to run git diff-tree for post-merge")?,
 
@@ -149,7 +156,14 @@ fn get_changed_files(
 
         // NOTE: HEAD~1 fails on the initial commit — this is caught below and silently skipped
         "post-commit" => Command::new("git")
-            .args(["diff-tree", "-r", "--name-only", "--no-commit-id", "HEAD~1", "HEAD"])
+            .args([
+                "diff-tree",
+                "-r",
+                "--name-only",
+                "--no-commit-id",
+                "HEAD~1",
+                "HEAD",
+            ])
             .output()
             .context("Failed to run git diff-tree for post-commit")?,
 
@@ -181,8 +195,8 @@ fn should_skip(file: &str) -> bool {
 
     // Skip binary and non-code files by extension
     let skip_extensions = [
-        ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".woff", ".woff2", ".ttf", ".eot",
-        ".mp3", ".mp4", ".zip", ".tar", ".gz", ".pdf",
+        ".png", ".jpg", ".jpeg", ".gif", ".svg", ".ico", ".woff", ".woff2", ".ttf", ".eot", ".mp3",
+        ".mp4", ".zip", ".tar", ".gz", ".pdf",
     ];
 
     let lower = file.to_lowercase();
@@ -278,7 +292,8 @@ fn write_drift_pending(
         files_changed: total_files,
     };
 
-    let json = serde_json::to_string_pretty(&pending).context("Failed to serialize drift pending")?;
+    let json =
+        serde_json::to_string_pretty(&pending).context("Failed to serialize drift pending")?;
     fs::write(&path, json).with_context(|| format!("Failed to write {}", path.display()))?;
 
     Ok(())

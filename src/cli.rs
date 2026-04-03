@@ -384,7 +384,11 @@ pub async fn run() -> Result<()> {
             if candidates.is_empty() {
                 ui::info("No memory candidates detected from scan.");
             } else {
-                init::candidates::write_candidates_file(wiki_dir, &candidates, &wiki_config.language)?;
+                init::candidates::write_candidates_file(
+                    wiki_dir,
+                    &candidates,
+                    &wiki_config.language,
+                )?;
                 ui::success(&format!(
                     "{} memory candidate(s) written to .wiki/_candidates.md",
                     candidates.len()
@@ -419,11 +423,6 @@ pub async fn run() -> Result<()> {
             old_ref,
             new_ref,
             branch_flag,
-        } => wiki::git_hook::run(
-            &event,
-            old_ref.as_deref(),
-            new_ref.as_deref(),
-            branch_flag,
-        ),
+        } => wiki::git_hook::run(&event, old_ref.as_deref(), new_ref.as_deref(), branch_flag),
     }
 }

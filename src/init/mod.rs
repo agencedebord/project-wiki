@@ -184,7 +184,8 @@ fn run_scan(scan_only: bool) -> Result<()> {
         })?;
 
         let analysis = analysis_map.get(&domain.name);
-        let overview_content = scan::generate_domain_overview(domain, &active_domains, analysis, lang);
+        let overview_content =
+            scan::generate_domain_overview(domain, &active_domains, analysis, lang);
         let overview_path = domain_dir.join("_overview.md");
         fs::write(&overview_path, &overview_content)
             .with_context(|| format!("Failed to write {}", overview_path.display()))?;
@@ -263,7 +264,10 @@ fn merge_notion_data(wiki_dir: &Path, notion_domains: &[notion::NotionDomainInfo
 
             // Add business rules
             if !domain_info.business_rules.is_empty() {
-                content.push_str(&format!("\n## {}\n\n", crate::i18n::t("business_rules_from_notion", lang)));
+                content.push_str(&format!(
+                    "\n## {}\n\n",
+                    crate::i18n::t("business_rules_from_notion", lang)
+                ));
                 for rule in &domain_info.business_rules {
                     content.push_str(&format!("- {} [needs-validation]\n", rule));
                 }
@@ -271,7 +275,10 @@ fn merge_notion_data(wiki_dir: &Path, notion_domains: &[notion::NotionDomainInfo
 
             // Add decisions
             if !domain_info.decisions.is_empty() {
-                content.push_str(&format!("\n## {}\n\n", crate::i18n::t("decisions_from_notion", lang)));
+                content.push_str(&format!(
+                    "\n## {}\n\n",
+                    crate::i18n::t("decisions_from_notion", lang)
+                ));
                 for decision in &domain_info.decisions {
                     content.push_str(&format!("- {} [needs-validation]\n", decision));
                 }
@@ -279,7 +286,10 @@ fn merge_notion_data(wiki_dir: &Path, notion_domains: &[notion::NotionDomainInfo
 
             // Add ticket summaries
             if !domain_info.tickets.is_empty() {
-                content.push_str(&format!("\n## {}\n\n", crate::i18n::t("notion_tickets", lang)));
+                content.push_str(&format!(
+                    "\n## {}\n\n",
+                    crate::i18n::t("notion_tickets", lang)
+                ));
                 for ticket in &domain_info.tickets {
                     let status = ticket.status.as_deref().unwrap_or("\u{2014}");
                     content.push_str(&format!(
@@ -307,7 +317,10 @@ fn merge_notion_data(wiki_dir: &Path, notion_domains: &[notion::NotionDomainInfo
             );
 
             if !domain_info.business_rules.is_empty() {
-                content.push_str(&format!("\n## {}\n\n", crate::i18n::t("business_rules", lang)));
+                content.push_str(&format!(
+                    "\n## {}\n\n",
+                    crate::i18n::t("business_rules", lang)
+                ));
                 for rule in &domain_info.business_rules {
                     content.push_str(&format!("- {} [needs-validation]\n", rule));
                 }
@@ -321,7 +334,10 @@ fn merge_notion_data(wiki_dir: &Path, notion_domains: &[notion::NotionDomainInfo
             }
 
             if !domain_info.tickets.is_empty() {
-                content.push_str(&format!("\n## {}\n\n", crate::i18n::t("notion_tickets", lang)));
+                content.push_str(&format!(
+                    "\n## {}\n\n",
+                    crate::i18n::t("notion_tickets", lang)
+                ));
                 for ticket in &domain_info.tickets {
                     let status = ticket.status.as_deref().unwrap_or("\u{2014}");
                     content.push_str(&format!(
@@ -356,8 +372,14 @@ fn merge_notion_data(wiki_dir: &Path, notion_domains: &[notion::NotionDomainInfo
             String::new()
         };
 
-        content.push_str(&format!("\n## {}\n\n", crate::i18n::t("contradictions_from_notion", lang)));
-        content.push_str(&format!("> {}\n\n", crate::i18n::t("contradictions_intro", lang)));
+        content.push_str(&format!(
+            "\n## {}\n\n",
+            crate::i18n::t("contradictions_from_notion", lang)
+        ));
+        content.push_str(&format!(
+            "> {}\n\n",
+            crate::i18n::t("contradictions_intro", lang)
+        ));
 
         for (domain, t1, t2) in &all_contradictions {
             content.push_str(&format!("- **{}**: \"{}\" vs \"{}\"\n", domain, t1, t2));

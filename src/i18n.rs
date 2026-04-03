@@ -79,15 +79,21 @@ pub fn t<'a>(key: &'a str, lang: &str) -> &'a str {
         ("dependency_graph", "fr") => "Graphe de dépendances des domaines",
         ("dependency_graph", _) => "Domain dependency graph",
 
-        ("auto_generated_scan", "fr") => "Auto-généré depuis le scan du code. Ne pas éditer manuellement.",
+        ("auto_generated_scan", "fr") => {
+            "Auto-généré depuis le scan du code. Ne pas éditer manuellement."
+        }
         ("auto_generated_scan", _) => "Auto-generated from codebase scan. Do not edit manually.",
 
         // ─── Needs review ───
         ("needs_review", "fr") => "À vérifier",
         ("needs_review", _) => "Needs review",
 
-        ("needs_review_intro", "fr") => "Les éléments ci-dessous ont été générés automatiquement et nécessitent une validation humaine.\n> Répondez ou validez chaque élément, puis supprimez-le de cette liste.",
-        ("needs_review_intro", _) => "Items below were generated automatically and need human validation.\n> Answer or validate each item, then remove it from this list.",
+        ("needs_review_intro", "fr") => {
+            "Les éléments ci-dessous ont été générés automatiquement et nécessitent une validation humaine.\n> Répondez ou validez chaque élément, puis supprimez-le de cette liste."
+        }
+        ("needs_review_intro", _) => {
+            "Items below were generated automatically and need human validation.\n> Answer or validate each item, then remove it from this list."
+        }
 
         ("open_questions", "fr") => "Questions ouvertes",
         ("open_questions", _) => "Open questions",
@@ -115,20 +121,28 @@ pub fn t<'a>(key: &'a str, lang: &str) -> &'a str {
         ("health", _) => "Health",
 
         // ─── Graph (wiki::graph::run) ───
-        ("auto_generated_graph", "fr") => "Auto-généré depuis les notes de domaine. Ne pas éditer manuellement.",
+        ("auto_generated_graph", "fr") => {
+            "Auto-généré depuis les notes de domaine. Ne pas éditer manuellement."
+        }
         ("auto_generated_graph", _) => "Auto-generated from domain notes. Do not edit manually.",
 
         // ─── Domain overview template (add domain) ───
         ("description_placeholder", "fr") => "_Brève description de ce domaine._",
         ("description_placeholder", _) => "_Brief description of this domain._",
 
-        ("key_behaviors_placeholder", "fr") => "_Documentez les comportements clés ici. Taguez chacun avec un niveau de confiance._",
-        ("key_behaviors_placeholder", _) => "_Document key behaviors here. Tag each with a confidence level._",
+        ("key_behaviors_placeholder", "fr") => {
+            "_Documentez les comportements clés ici. Taguez chacun avec un niveau de confiance._"
+        }
+        ("key_behaviors_placeholder", _) => {
+            "_Document key behaviors here. Tag each with a confidence level._"
+        }
 
         ("business_rules", "fr") => "Règles métier",
         ("business_rules", _) => "Business rules",
 
-        ("business_rules_placeholder", "fr") => "_Documentez les règles métier spécifiques à ce domaine._",
+        ("business_rules_placeholder", "fr") => {
+            "_Documentez les règles métier spécifiques à ce domaine._"
+        }
         ("business_rules_placeholder", _) => "_Document business rules specific to this domain._",
 
         ("dependencies_placeholder", "fr") => "_Listez les domaines dont celui-ci dépend._",
@@ -150,15 +164,23 @@ pub fn t<'a>(key: &'a str, lang: &str) -> &'a str {
         ("contradictions_from_notion", "fr") => "Contradictions (depuis Notion)",
         ("contradictions_from_notion", _) => "Contradictions (from Notion)",
 
-        ("contradictions_intro", "fr") => "Ces paires de tickets peuvent contenir des informations contradictoires. Le ticket le plus récent prévaut probablement sur l'ancien.",
-        ("contradictions_intro", _) => "These ticket pairs may contain contradictory information. The newer ticket likely supersedes the older one.",
+        ("contradictions_intro", "fr") => {
+            "Ces paires de tickets peuvent contenir des informations contradictoires. Le ticket le plus récent prévaut probablement sur l'ancien."
+        }
+        ("contradictions_intro", _) => {
+            "These ticket pairs may contain contradictory information. The newer ticket likely supersedes the older one."
+        }
 
         // ─── Candidates ───
         ("memory_candidates", "fr") => "Candidats mémoire",
         ("memory_candidates", _) => "Memory Candidates",
 
-        ("candidates_intro", "fr") => "Propositions auto-générées à confirmer, rejeter ou reformuler.\n> Ces candidats ne sont pas encore de la mémoire confirmée.\n> Éditez ce fichier ou utilisez `codefidence promote <id>` pour valider.",
-        ("candidates_intro", _) => "Auto-generated proposals to confirm, reject, or reformulate.\n> These candidates are not yet confirmed memory.\n> Edit this file or use `codefidence promote <id>` to validate.",
+        ("candidates_intro", "fr") => {
+            "Propositions auto-générées à confirmer, rejeter ou reformuler.\n> Ces candidats ne sont pas encore de la mémoire confirmée.\n> Éditez ce fichier ou utilisez `codefidence promote <id>` pour valider."
+        }
+        ("candidates_intro", _) => {
+            "Auto-generated proposals to confirm, reject, or reformulate.\n> These candidates are not yet confirmed memory.\n> Edit this file or use `codefidence promote <id>` to validate."
+        }
 
         ("no_candidates", "fr") => "Aucun candidat détecté.",
         ("no_candidates", _) => "No candidates detected.",

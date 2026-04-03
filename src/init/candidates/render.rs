@@ -9,14 +9,18 @@ use crate::i18n::t;
 /// Format candidates into a markdown file.
 pub fn format_candidates_markdown(candidates: &[Candidate], lang: &str) -> String {
     let intro = t("candidates_intro", lang);
-    let intro_lines: Vec<String> = intro.lines().map(|l| {
-        if l.starts_with('>') { l.to_string() } else { format!("> {}", l) }
-    }).collect();
+    let intro_lines: Vec<String> = intro
+        .lines()
+        .map(|l| {
+            if l.starts_with('>') {
+                l.to_string()
+            } else {
+                format!("> {}", l)
+            }
+        })
+        .collect();
 
-    let mut lines = vec![
-        format!("# {}", t("memory_candidates", lang)),
-        String::new(),
-    ];
+    let mut lines = vec![format!("# {}", t("memory_candidates", lang)), String::new()];
     lines.extend(intro_lines);
 
     if candidates.is_empty() {

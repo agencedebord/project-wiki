@@ -40,7 +40,9 @@ pub fn generate_domain_overview(
         // Title + description
         sections.push(format!(
             "# {}\n\n## {}\n{} `[llm-analyzed]`",
-            title, t("what_this_domain_does", lang), analysis.description
+            title,
+            t("what_this_domain_does", lang),
+            analysis.description
         ));
 
         // Key behaviors
@@ -85,7 +87,9 @@ pub fn generate_domain_overview(
         // ─── Structural fallback (no LLM) ───
         let mut fallback = format!(
             "# {}\n\n## {}\n{} `[inferred]`",
-            title, t("description", lang), t("llm_not_available", lang)
+            title,
+            t("description", lang),
+            t("llm_not_available", lang)
         );
 
         // Include structural signals so the overview is not completely empty
@@ -118,9 +122,9 @@ pub fn generate_domain_overview(
     }
 
     // Notes from code (TODO/FIXME/HACK/NOTE) — always included if present
-    if let Some(s) =
-        format_list_section_opt(t("notes_from_code", lang), &domain.comments, |c| format!("- {}", c))
-    {
+    if let Some(s) = format_list_section_opt(t("notes_from_code", lang), &domain.comments, |c| {
+        format!("- {}", c)
+    }) {
         sections.push(s);
     }
 
@@ -359,8 +363,12 @@ mod tests {
     fn generate_overview_with_analysis_contains_real_docs() {
         let domain = domain_with_signal();
         let analysis = sample_analysis();
-        let overview =
-            generate_domain_overview(&domain, std::slice::from_ref(&domain), Some(&analysis), "en");
+        let overview = generate_domain_overview(
+            &domain,
+            std::slice::from_ref(&domain),
+            Some(&analysis),
+            "en",
+        );
 
         assert!(overview.contains("## What this domain does"));
         assert!(overview.contains("Handles billing operations"));
@@ -378,8 +386,12 @@ mod tests {
     fn generate_overview_with_analysis_no_inventory() {
         let domain = domain_with_signal();
         let analysis = sample_analysis();
-        let overview =
-            generate_domain_overview(&domain, std::slice::from_ref(&domain), Some(&analysis), "en");
+        let overview = generate_domain_overview(
+            &domain,
+            std::slice::from_ref(&domain),
+            Some(&analysis),
+            "en",
+        );
 
         assert!(
             !overview.contains("## Data models"),
@@ -427,8 +439,12 @@ mod tests {
             gotchas: vec![],
             memory_candidates: vec![],
         };
-        let overview =
-            generate_domain_overview(&domain, std::slice::from_ref(&domain), Some(&analysis), "en");
+        let overview = generate_domain_overview(
+            &domain,
+            std::slice::from_ref(&domain),
+            Some(&analysis),
+            "en",
+        );
 
         assert!(overview.contains("## What this domain does"));
         assert!(
@@ -590,8 +606,12 @@ mod tests {
     fn generate_overview_french_headers() {
         let domain = domain_with_signal();
         let analysis = sample_analysis();
-        let overview =
-            generate_domain_overview(&domain, std::slice::from_ref(&domain), Some(&analysis), "fr");
+        let overview = generate_domain_overview(
+            &domain,
+            std::slice::from_ref(&domain),
+            Some(&analysis),
+            "fr",
+        );
 
         assert!(overview.contains("## Ce que fait ce domaine"));
         assert!(overview.contains("## Comportements clés"));
@@ -604,8 +624,7 @@ mod tests {
     #[test]
     fn generate_overview_french_fallback() {
         let domain = domain_with_signal();
-        let overview =
-            generate_domain_overview(&domain, std::slice::from_ref(&domain), None, "fr");
+        let overview = generate_domain_overview(&domain, std::slice::from_ref(&domain), None, "fr");
 
         assert!(overview.contains("## Description"));
         assert!(overview.contains("L'analyse LLM"));
