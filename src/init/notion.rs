@@ -597,7 +597,10 @@ async fn fetch_ticket_details(
         let ticket = (*ticket).clone();
 
         async move {
-            let _permit = semaphore.acquire().await.unwrap();
+            let _permit = semaphore
+                .acquire()
+                .await
+                .context("semaphore closed unexpectedly")?;
 
             let mut enriched_ticket = ticket.clone();
 
@@ -916,26 +919,17 @@ fn extract_decisions(tickets: &[NotionTicket]) -> Vec<String> {
 
 // ─── HTTP helpers with retry and rate-limit handling ───
 
-async fn api_request_with_retry(
-    client: &reqwest::Client,
-    url: &str,
-    token: &str,
-    body: Option<&serde_json::Value>,
+/// Shared retry wrapper for all Notion API calls.
+///
+/// `build_request` is called on each attempt to construct the `reqwest::RequestBuilder`.
+/// This lets callers decide the HTTP method, headers, and body.
+async fn notion_request_with_retry(
+    build_request: impl Fn() -> reqwest::RequestBuilder,
 ) -> Result<serde_json::Value> {
-    let mut retries = 0;
+    let mut retries = 0u32;
 
     loop {
-        let mut req = client
-            .post(url)
-            .header("Authorization", format!("Bearer {}", token))
-            .header("Notion-Version", NOTION_VERSION)
-            .header("Content-Type", "application/json");
-
-        if let Some(b) = body {
-            req = req.json(b);
-        }
-
-        let response = req.send().await;
+        let response = build_request().send().await;
 
         match response {
             Ok(resp) => {
@@ -950,7 +944,6 @@ async fn api_request_with_retry(
                 }
 
                 if status.as_u16() == 429 {
-                    // Rate limited
                     retries += 1;
                     if retries > MAX_RETRIES {
                         bail!(
@@ -1010,69 +1003,39 @@ async fn api_request_with_retry(
     }
 }
 
+async fn api_request_with_retry(
+    client: &reqwest::Client,
+    url: &str,
+    token: &str,
+    body: Option<&serde_json::Value>,
+) -> Result<serde_json::Value> {
+    let body_owned = body.cloned();
+    notion_request_with_retry(|| {
+        let mut req = client
+            .post(url)
+            .header("Authorization", format!("Bearer {}", token))
+            .header("Notion-Version", NOTION_VERSION)
+            .header("Content-Type", "application/json");
+        if let Some(ref b) = body_owned {
+            req = req.json(b);
+        }
+        req
+    })
+    .await
+}
+
 async fn api_get_with_retry(
     client: &reqwest::Client,
     url: &str,
     token: &str,
 ) -> Result<serde_json::Value> {
-    let mut retries = 0;
-
-    loop {
-        let response = client
+    notion_request_with_retry(|| {
+        client
             .get(url)
             .header("Authorization", format!("Bearer {}", token))
             .header("Notion-Version", NOTION_VERSION)
-            .send()
-            .await;
-
-        match response {
-            Ok(resp) => {
-                let status = resp.status();
-
-                if status.is_success() {
-                    let json: serde_json::Value = resp
-                        .json()
-                        .await
-                        .context("Failed to parse Notion API response")?;
-                    return Ok(json);
-                }
-
-                if status.as_u16() == 429 {
-                    retries += 1;
-                    if retries > MAX_RETRIES {
-                        bail!(
-                            "Notion API rate limit exceeded after {} retries",
-                            MAX_RETRIES
-                        );
-                    }
-
-                    let retry_after = resp
-                        .headers()
-                        .get("retry-after")
-                        .and_then(|v| v.to_str().ok())
-                        .and_then(|s| s.parse::<u64>().ok())
-                        .unwrap_or(1);
-
-                    let delay = Duration::from_millis(
-                        retry_after * 1000 + BASE_RETRY_DELAY_MS * retries as u64,
-                    );
-                    tokio::time::sleep(delay).await;
-                    continue;
-                }
-
-                let error_body = resp.text().await.unwrap_or_default();
-                bail!("Notion API error ({}): {}", status, error_body);
-            }
-            Err(e) => {
-                retries += 1;
-                if retries > MAX_RETRIES {
-                    bail!("Network error after {} retries: {}", MAX_RETRIES, e);
-                }
-                let delay = Duration::from_millis(BASE_RETRY_DELAY_MS * 2u64.pow(retries));
-                tokio::time::sleep(delay).await;
-            }
-        }
-    }
+    })
+    .await
 }
 
 // ─── Resume support ───
