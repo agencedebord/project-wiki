@@ -17,15 +17,26 @@ use anyhow::{Context, Result};
 use crate::ui;
 use crate::wiki::config;
 
-pub async fn run(
-    scan: bool,
-    hooks: bool,
-    full: bool,
-    from_notion: Option<String>,
-    resume: bool,
-    scan_only: bool,
-    language: &str,
-) -> Result<()> {
+pub struct InitOptions {
+    pub scan: bool,
+    pub hooks: bool,
+    pub full: bool,
+    pub from_notion: Option<String>,
+    pub resume: bool,
+    pub scan_only: bool,
+    pub language: String,
+}
+
+pub async fn run(opts: InitOptions) -> Result<()> {
+    let InitOptions {
+        scan,
+        hooks,
+        full,
+        from_notion,
+        resume,
+        scan_only,
+        ref language,
+    } = opts;
     // Warn if language is not explicitly supported
     if !crate::i18n::is_supported(language) {
         ui::warn(&format!(
@@ -238,6 +249,33 @@ fn run_scan(scan_only: bool) -> Result<()> {
     Ok(())
 }
 
+/// Render a list of Notion tickets as a Markdown bullet list (with heading).
+/// Returns an empty string when `tickets` is empty.
+#[cfg(feature = "notion")]
+fn render_tickets_section(tickets: &[notion::NotionTicket], lang: &str) -> String {
+    if tickets.is_empty() {
+        return String::new();
+    }
+    let mut out = format!(
+        "\n## {}\n\n",
+        crate::i18n::t("notion_tickets", lang)
+    );
+    for ticket in tickets {
+        let status = ticket.status.as_deref().unwrap_or("\u{2014}");
+        out.push_str(&format!(
+            "- **{}** ({}){}\n",
+            ticket.title,
+            status,
+            ticket
+                .date
+                .as_ref()
+                .map(|d| format!(" \u{2014} {}", d))
+                .unwrap_or_default()
+        ));
+    }
+    out
+}
+
 /// Merge Notion domain data into existing wiki notes.
 #[cfg(feature = "notion")]
 fn merge_notion_data(wiki_dir: &Path, notion_domains: &[notion::NotionDomainInfo]) -> Result<()> {
@@ -285,25 +323,7 @@ fn merge_notion_data(wiki_dir: &Path, notion_domains: &[notion::NotionDomainInfo
             }
 
             // Add ticket summaries
-            if !domain_info.tickets.is_empty() {
-                content.push_str(&format!(
-                    "\n## {}\n\n",
-                    crate::i18n::t("notion_tickets", lang)
-                ));
-                for ticket in &domain_info.tickets {
-                    let status = ticket.status.as_deref().unwrap_or("\u{2014}");
-                    content.push_str(&format!(
-                        "- **{}** ({}){}\n",
-                        ticket.title,
-                        status,
-                        ticket
-                            .date
-                            .as_ref()
-                            .map(|d| format!(" \u{2014} {}", d))
-                            .unwrap_or_default()
-                    ));
-                }
-            }
+            content.push_str(&render_tickets_section(&domain_info.tickets, lang));
 
             fs::write(&overview_path, content)
                 .with_context(|| format!("Failed to write {}", overview_path.display()))?;
@@ -333,25 +353,7 @@ fn merge_notion_data(wiki_dir: &Path, notion_domains: &[notion::NotionDomainInfo
                 }
             }
 
-            if !domain_info.tickets.is_empty() {
-                content.push_str(&format!(
-                    "\n## {}\n\n",
-                    crate::i18n::t("notion_tickets", lang)
-                ));
-                for ticket in &domain_info.tickets {
-                    let status = ticket.status.as_deref().unwrap_or("\u{2014}");
-                    content.push_str(&format!(
-                        "- **{}** ({}){}\n",
-                        ticket.title,
-                        status,
-                        ticket
-                            .date
-                            .as_ref()
-                            .map(|d| format!(" \u{2014} {}", d))
-                            .unwrap_or_default()
-                    ));
-                }
-            }
+            content.push_str(&render_tickets_section(&domain_info.tickets, lang));
 
             fs::write(&overview_path, content)
                 .with_context(|| format!("Failed to write {}", overview_path.display()))?;

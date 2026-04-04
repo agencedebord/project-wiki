@@ -287,7 +287,18 @@ pub async fn run() -> Result<()> {
             resume,
             scan_only,
             language,
-        } => init::run(scan, hooks, full, from_notion, resume, scan_only, &language).await,
+        } => {
+            init::run(init::InitOptions {
+                scan,
+                hooks,
+                full,
+                from_notion,
+                resume,
+                scan_only,
+                language,
+            })
+            .await
+        }
 
         Commands::Status => wiki::status::run(),
 
