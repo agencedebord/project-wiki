@@ -2,7 +2,7 @@
 title: Candidates overview
 domain: candidates
 confidence: seen-in-code
-last_updated: "2026-03-30"
+last_updated: "2026-04-04"
 related_files:
   - src/init/candidates/heuristics.rs
 memory_items:
@@ -66,7 +66,7 @@ Generates memory item candidates by scanning source files with heuristics. Candi
 
 - Three heuristic detectors: exception (filename patterns), decision (comment keywords), business_rule (test + comment two-factor)
 - Exception detection scans file paths against regex patterns for legacy/compat/override naming
-- Decision detection scans extracted comments for deliberate-choice keywords, filtering generic text
+- Decision detection scans the `text` field of `CodeComment` structs for deliberate-choice keywords, filtering generic text
 - Business rule detection requires both a test file association and a meaningful (non-generic, non-decision) comment
 - Utility files (utils, helpers, constants, config, setup, index) are excluded via regex
 - Test files and directories are excluded from source scanning

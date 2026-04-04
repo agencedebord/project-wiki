@@ -2,7 +2,7 @@
 title: Scan overview
 domain: scan
 confidence: seen-in-code
-last_updated: "2026-04-03"
+last_updated: "2026-04-04"
 related_files:
   - src/init/scan/mod.rs
   - src/init/scan/structure.rs
@@ -10,6 +10,7 @@ related_files:
   - src/init/scan/details.rs
   - src/init/scan/imports.rs
   - src/init/scan/generate.rs
+  - src/graph_utils.rs
 memory_items:
   - id: scan-001
     type: decision
@@ -71,6 +72,50 @@ memory_items:
         line: 483
     status: active
     last_reviewed: "2026-04-03"
+  - id: scan-006
+    type: decision
+    text: "Recursive sub-domain splitting: when a sub-domain itself meets the large app thresholds (≥4 sub-packages AND ≥30 files), it is split again with qualified names (e.g. 'contrib-auth', 'contrib-admin'). Max depth: 2 levels."
+    confidence: seen-in-code
+    related_files:
+      - src/init/scan/structure.rs
+    sources:
+      - kind: file
+        ref: src/init/scan/structure.rs
+        line: 241
+    status: active
+    last_reviewed: "2026-04-04"
+  - id: scan-007
+    type: decision
+    text: "Dependency graph uses transitive reduction: if A→B→C exists, the direct A→C edge is removed. Applied via shared graph_utils module used by both init scan and wiki graph regeneration."
+    confidence: seen-in-code
+    related_files:
+      - src/graph_utils.rs
+      - src/init/scan/generate.rs
+    sources:
+      - kind: file
+        ref: src/graph_utils.rs
+        line: 10
+      - kind: file
+        ref: src/init/scan/generate.rs
+        line: 172
+    status: active
+    last_reviewed: "2026-04-04"
+  - id: scan-008
+    type: decision
+    text: "Code comments are extracted as structured CodeComment (tag, text, file_path) instead of flat strings. The _needs-review.md output is grouped by severity: FIXME > HACK > TODO > NOTE."
+    confidence: seen-in-code
+    related_files:
+      - src/init/scan/details.rs
+      - src/init/scan/generate.rs
+    sources:
+      - kind: file
+        ref: src/init/scan/details.rs
+        line: 55
+      - kind: file
+        ref: src/init/scan/generate.rs
+        line: 265
+    status: active
+    last_reviewed: "2026-04-04"
 ---
 
 # Scan
@@ -82,7 +127,7 @@ Scans a codebase to discover domains, analyze dependencies, and extract structur
 ## Key behaviors
 
 - Pass 1 (structure): walks the filesystem respecting .gitignore, skips extra directories (.wiki, node_modules, target, etc.), assigns files to domains based on parent directory patterns
-- Top-level app directories detected via `__init__.py` or ≥3 source files; large ones (≥4 sub-packages AND ≥30 source files) are automatically split into sub-domains
+- Top-level app directories detected via `__init__.py` or ≥3 source files; large ones (≥4 sub-packages AND ≥30 source files) are automatically split into sub-domains; recursive: sub-domains meeting the same thresholds are split again (max depth 2) with qualified names like `contrib-auth`
 - Domain names are extracted by finding a recognized parent dir (e.g. `services/`) and taking the next path component as the domain name
 - Next.js route groups like `(dashboard)` are skipped when extracting domain names
 - Singular/plural domain duplicates are merged (e.g. "user" + "users" -> "users", "entity" + "entities" -> "entities")
@@ -91,6 +136,8 @@ Scans a codebase to discover domains, analyze dependencies, and extract structur
 - Pass 2 (dependencies): extracts imports from source files and builds a cross-domain dependency graph
 - Pass 3 (details): extracts models, routes, TODO comments, and test files per domain
 - If no domain candidates are found, the scan completes gracefully with an empty result
+- Code comments are extracted as structured `CodeComment` (tag, text, file_path) — the `_needs-review.md` output groups them by severity: FIXME > HACK > TODO > NOTE
+- The generated dependency graph applies transitive reduction (if A→B→C exists, removes the A→C edge) via the shared `graph_utils` module
 
 ## Dependencies
 
