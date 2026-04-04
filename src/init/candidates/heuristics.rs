@@ -267,6 +267,7 @@ pub(super) fn truncate_text(text: &str, max_len: usize) -> String {
     if text.len() <= max_len {
         text.to_string()
     } else {
-        format!("{}...", &text[..max_len - 3])
+        let boundary = text.floor_char_boundary(max_len - 3);
+        format!("{}...", &text[..boundary])
     }
 }

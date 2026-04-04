@@ -163,7 +163,8 @@ fn compact_summary_fallback(note: &WikiNote, domain: &str) -> String {
 
 pub(super) fn truncate_output(result: String) -> String {
     if result.len() > MAX_CONTEXT_LEN {
-        let mut truncated = result[..MAX_CONTEXT_LEN - 20].to_string();
+        let boundary = result.floor_char_boundary(MAX_CONTEXT_LEN - 20);
+        let mut truncated = result[..boundary].to_string();
         truncated.push_str("\n[... truncated]");
         truncated
     } else {
