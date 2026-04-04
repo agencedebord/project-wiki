@@ -448,7 +448,12 @@ fn build_prompt(
     let comments_str = if domain.comments.is_empty() {
         "none".to_string()
     } else {
-        domain.comments.join("; ")
+        domain
+            .comments
+            .iter()
+            .map(|c| format!("[{}] {}", c.tag, c.text))
+            .collect::<Vec<_>>()
+            .join("; ")
     };
 
     let snippets_str = snippets

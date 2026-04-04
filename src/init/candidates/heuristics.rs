@@ -87,13 +87,7 @@ pub(super) fn detect_exception_candidates(domain: &DomainInfo, candidates: &mut 
 
 pub(super) fn detect_decision_candidates(domain: &DomainInfo, candidates: &mut Vec<Candidate>) {
     for comment in &domain.comments {
-        // Comments are in format "[TAG] text"
-        let text = comment
-            .strip_prefix("[TODO] ")
-            .or_else(|| comment.strip_prefix("[FIXME] "))
-            .or_else(|| comment.strip_prefix("[HACK] "))
-            .or_else(|| comment.strip_prefix("[NOTE] "))
-            .unwrap_or(comment);
+        let text = &comment.text;
 
         if RE_DECISION_COMMENT.is_match(text) && !is_generic_text(text) {
             candidates.push(Candidate {
@@ -105,7 +99,7 @@ pub(super) fn detect_decision_candidates(domain: &DomainInfo, candidates: &mut V
                     .to_string(),
                 provenance: vec![ProvenanceEntry {
                     kind: "comment".to_string(),
-                    ref_: comment.clone(),
+                    ref_: comment.to_string(),
                 }],
                 target_note: format!(".wiki/domains/{}/_overview.md", domain.name),
             });
@@ -149,21 +143,18 @@ pub(super) fn detect_business_rule_candidates(
         }
 
         // Look for relevant comments in this domain for this file
-        let relevant_comments: Vec<&String> = domain
+        let relevant_comments: Vec<_> = domain
             .comments
             .iter()
-            .filter(|c| {
-                let text = c.split("] ").nth(1).unwrap_or(c);
-                !RE_DECISION_COMMENT.is_match(text) && !is_generic_text(text)
-            })
+            .filter(|c| !RE_DECISION_COMMENT.is_match(&c.text) && !is_generic_text(&c.text))
             .collect();
 
         if relevant_comments.is_empty() {
             continue;
         }
 
-        let first_comment = relevant_comments[0];
-        let comment_text = first_comment.split("] ").nth(1).unwrap_or(first_comment);
+        let first_comment = &relevant_comments[0];
+        let comment_text = &first_comment.text;
 
         let mut provenance = vec![ProvenanceEntry {
             kind: "file".to_string(),
@@ -179,7 +170,7 @@ pub(super) fn detect_business_rule_candidates(
 
         provenance.push(ProvenanceEntry {
             kind: "comment".to_string(),
-            ref_: first_comment.clone(),
+            ref_: first_comment.to_string(),
         });
 
         candidates.push(Candidate {

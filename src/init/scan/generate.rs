@@ -122,10 +122,14 @@ pub fn generate_domain_overview(
     }
 
     // Notes from code (TODO/FIXME/HACK/NOTE) — always included if present
-    if let Some(s) = format_list_section_opt(t("notes_from_code", lang), &domain.comments, |c| {
-        format!("- {}", c)
-    }) {
-        sections.push(s);
+    if !domain.comments.is_empty() {
+        let list: String = domain
+            .comments
+            .iter()
+            .map(|c| format!("- [{}] {} (`{}`)", c.tag, c.text, c.file_path))
+            .collect::<Vec<_>>()
+            .join("\n");
+        sections.push(format!("## {}\n{}", t("notes_from_code", lang), list));
     }
 
     // Dependencies (always included if present)
@@ -255,36 +259,69 @@ pub fn generate_index(domains: &[DomainInfo], date: &str, lang: &str) -> String 
     )
 }
 
-/// Generate the _needs-review.md content.
+/// Generate the _needs-review.md content, grouped by tag severity.
 pub fn generate_needs_review(domains: &[DomainInfo], lang: &str) -> String {
-    let mut questions: Vec<String> = Vec::new();
+    use super::CodeComment;
 
+    // Collect all comments with their domain name
+    let mut all_comments: Vec<(&str, &CodeComment)> = Vec::new();
     for domain in domains {
         for comment in &domain.comments {
-            questions.push(format!("- **{}**: {}", capitalize(&domain.name), comment));
+            all_comments.push((&domain.name, comment));
         }
     }
 
-    let questions_section = if questions.is_empty() {
-        t("no_open_questions", lang).to_string()
-    } else {
-        questions.join("\n")
-    };
+    if all_comments.is_empty() {
+        return format!(
+            "# {}\n\n\
+             > {}\n\n\
+             {}\n\n\
+             ## {}\n\n\
+             {}\n",
+            t("needs_review", lang),
+            t("needs_review_intro", lang),
+            t("no_open_questions", lang),
+            t("unresolved_contradictions", lang),
+            t("none_detected", lang),
+        );
+    }
 
-    format!(
-        "# {}\n\n\
-         > {}\n\n\
-         ## {}\n\n\
-         {}\n\n\
-         ## {}\n\n\
-         {}\n",
+    // Group by tag in severity order: FIXME > HACK > TODO > NOTE
+    let tag_order = ["FIXME", "HACK", "TODO", "NOTE"];
+    let mut sections = Vec::new();
+
+    sections.push(format!(
+        "# {}\n\n> {}",
         t("needs_review", lang),
         t("needs_review_intro", lang),
-        t("open_questions", lang),
-        questions_section,
+    ));
+
+    for tag in &tag_order {
+        let items: Vec<String> = all_comments
+            .iter()
+            .filter(|(_, c)| c.tag == *tag)
+            .map(|(domain, c)| {
+                format!(
+                    "- **{}** (`{}`): {}",
+                    capitalize(domain),
+                    c.file_path,
+                    c.text
+                )
+            })
+            .collect();
+
+        if !items.is_empty() {
+            sections.push(format!("## {} ({})\n\n{}", tag, items.len(), items.join("\n")));
+        }
+    }
+
+    sections.push(format!(
+        "## {}\n\n{}",
         t("unresolved_contradictions", lang),
         t("none_detected", lang),
-    )
+    ));
+
+    sections.join("\n\n")
 }
 
 // ─── Helpers ───
@@ -302,26 +339,11 @@ fn format_related_files(files: &[String]) -> String {
     }
 }
 
-fn format_list_section_opt<F>(title: &str, items: &[String], formatter: F) -> Option<String>
-where
-    F: Fn(&str) -> String,
-{
-    if items.is_empty() {
-        None
-    } else {
-        let list: String = items
-            .iter()
-            .map(|i| formatter(i))
-            .collect::<Vec<_>>()
-            .join("\n");
-        Some(format!("## {}\n{}", title, list))
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::init::analyze::{Behavior, Interaction, LlmAnalysis, LlmCandidate};
+    use crate::init::scan::CodeComment;
 
     fn domain_with_signal() -> DomainInfo {
         DomainInfo {
@@ -473,7 +495,11 @@ mod tests {
             dependencies: vec!["users".to_string()],
             models: vec![],
             routes: vec![],
-            comments: vec!["[TODO] Fix calculation".to_string()],
+            comments: vec![CodeComment {
+                tag: "TODO".to_string(),
+                text: "Fix calculation".to_string(),
+                file_path: "src/billing/invoice.ts".to_string(),
+            }],
             test_files: vec![],
         };
         let users = DomainInfo {
@@ -499,6 +525,7 @@ mod tests {
         assert!(overview.contains("[Users](../users/_overview.md)"));
         assert!(overview.contains("## Notes from code"));
         assert!(overview.contains("[TODO] Fix calculation"));
+        assert!(overview.contains("(`src/billing/invoice.ts`)"));
     }
 
     #[test]
@@ -575,13 +602,56 @@ mod tests {
             dependencies: vec![],
             models: vec![],
             routes: vec![],
-            comments: vec!["[TODO] Fix invoice calculation".to_string()],
+            comments: vec![CodeComment {
+                tag: "TODO".to_string(),
+                text: "Fix invoice calculation".to_string(),
+                file_path: "src/billing/invoice.py".to_string(),
+            }],
             test_files: vec![],
         }];
 
         let review = generate_needs_review(&domains, "en");
         assert!(review.contains("Fix invoice calculation"));
         assert!(review.contains("Billing"));
+        assert!(review.contains("## TODO (1)"));
+        assert!(review.contains("`src/billing/invoice.py`"));
+    }
+
+    #[test]
+    fn generate_needs_review_groups_by_tag() {
+        let domains = vec![DomainInfo {
+            name: "billing".to_string(),
+            files: vec![],
+            dependencies: vec![],
+            models: vec![],
+            routes: vec![],
+            comments: vec![
+                CodeComment {
+                    tag: "TODO".to_string(),
+                    text: "refactor this".to_string(),
+                    file_path: "src/billing/invoice.py".to_string(),
+                },
+                CodeComment {
+                    tag: "FIXME".to_string(),
+                    text: "critical bug".to_string(),
+                    file_path: "src/billing/payment.py".to_string(),
+                },
+                CodeComment {
+                    tag: "NOTE".to_string(),
+                    text: "business rule".to_string(),
+                    file_path: "src/billing/rules.py".to_string(),
+                },
+            ],
+            test_files: vec![],
+        }];
+
+        let review = generate_needs_review(&domains, "en");
+        // FIXME should appear before TODO
+        let fixme_pos = review.find("## FIXME").expect("FIXME section missing");
+        let todo_pos = review.find("## TODO").expect("TODO section missing");
+        let note_pos = review.find("## NOTE").expect("NOTE section missing");
+        assert!(fixme_pos < todo_pos, "FIXME should come before TODO");
+        assert!(todo_pos < note_pos, "TODO should come before NOTE");
     }
 
     #[test]
@@ -675,13 +745,16 @@ mod tests {
             dependencies: vec![],
             models: vec![],
             routes: vec![],
-            comments: vec!["[TODO] Fix calculation".to_string()],
+            comments: vec![CodeComment {
+                tag: "TODO".to_string(),
+                text: "Fix calculation".to_string(),
+                file_path: "src/billing/invoice.py".to_string(),
+            }],
             test_files: vec![],
         }];
 
         let review = generate_needs_review(&domains, "fr");
         assert!(review.contains("À vérifier"));
-        assert!(review.contains("Questions ouvertes"));
         assert!(review.contains("Contradictions non résolues"));
         assert!(!review.contains("Needs review"));
     }

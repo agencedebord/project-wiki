@@ -5,7 +5,7 @@ use super::heuristics::{
 };
 use super::render::{format_candidates_markdown, parse_processed_ids, write_candidates_file};
 use super::*;
-use crate::init::scan::DomainInfo;
+use crate::init::scan::{CodeComment, DomainInfo};
 
 fn make_domain(
     name: &str,
@@ -19,7 +19,28 @@ fn make_domain(
         dependencies: Vec::new(),
         models: Vec::new(),
         routes: Vec::new(),
-        comments: comments.into_iter().map(|s| s.to_string()).collect(),
+        comments: comments
+            .into_iter()
+            .map(|s| {
+                // Parse "[TAG] text" format used in test fixtures
+                if let Some(rest) = s.strip_prefix('[') {
+                    if let Some(idx) = rest.find(']') {
+                        let tag = &rest[..idx];
+                        let text = rest[idx + 1..].trim().to_string();
+                        return CodeComment {
+                            tag: tag.to_string(),
+                            text,
+                            file_path: "test.py".to_string(),
+                        };
+                    }
+                }
+                CodeComment {
+                    tag: "NOTE".to_string(),
+                    text: s.to_string(),
+                    file_path: "test.py".to_string(),
+                }
+            })
+            .collect(),
         test_files: test_files.into_iter().map(|s| s.to_string()).collect(),
     }
 }

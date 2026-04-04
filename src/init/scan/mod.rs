@@ -11,6 +11,7 @@ use anyhow::{Context, Result};
 
 use crate::ui;
 
+pub use details::CodeComment;
 pub use generate::{
     generate_domain_overview, generate_graph, generate_index, generate_needs_review,
 };
@@ -24,7 +25,7 @@ pub struct DomainInfo {
     pub dependencies: Vec<String>,
     pub models: Vec<String>,
     pub routes: Vec<String>,
-    pub comments: Vec<String>,
+    pub comments: Vec<CodeComment>,
     pub test_files: Vec<String>,
 }
 
@@ -313,7 +314,11 @@ mod tests {
     #[test]
     fn has_signal_returns_true_with_comments() {
         let mut d = empty_domain();
-        d.comments = vec!["[TODO] fix this".to_string()];
+        d.comments = vec![CodeComment {
+            tag: "TODO".to_string(),
+            text: "fix this".to_string(),
+            file_path: "src/test.rs".to_string(),
+        }];
         assert!(d.has_signal());
     }
 

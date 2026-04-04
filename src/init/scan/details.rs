@@ -50,11 +50,24 @@ static RE_NESTJS_CONTROLLER: LazyLock<Regex> =
 
 // ─── Types ───
 
+#[derive(Debug, Clone)]
+pub struct CodeComment {
+    pub tag: String,
+    pub text: String,
+    pub file_path: String,
+}
+
+impl std::fmt::Display for CodeComment {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "[{}] {}", self.tag, self.text)
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct DomainDetails {
     pub models: Vec<String>,
     pub routes: Vec<String>,
-    pub comments: Vec<String>,
+    pub comments: Vec<CodeComment>,
 }
 
 // ─── Detail extraction ───
@@ -97,7 +110,11 @@ fn extract_file_details(content: &str, path: &Path) -> DomainDetails {
         let tag = &cap[1];
         let text = cap[2].trim().trim_end_matches("*/").trim();
         if !text.is_empty() {
-            details.comments.push(format!("[{}] {}", tag, text));
+            details.comments.push(CodeComment {
+                tag: tag.to_string(),
+                text: text.to_string(),
+                file_path: path.to_string_lossy().to_string(),
+            });
         }
     }
 
@@ -324,9 +341,14 @@ app.post('/payments', handler);
 "#;
         let result = extract_file_details(content, Path::new("src/billing/invoice.ts"));
         assert_eq!(result.comments.len(), 3);
-        assert!(result.comments.iter().any(|c| c.contains("[TODO]")));
-        assert!(result.comments.iter().any(|c| c.contains("[FIXME]")));
-        assert!(result.comments.iter().any(|c| c.contains("[NOTE]")));
+        assert!(result.comments.iter().any(|c| c.tag == "TODO"));
+        assert!(result.comments.iter().any(|c| c.tag == "FIXME"));
+        assert!(result.comments.iter().any(|c| c.tag == "NOTE"));
+        // Verify file path is captured
+        assert!(result
+            .comments
+            .iter()
+            .all(|c| c.file_path == "src/billing/invoice.ts"));
     }
 
     #[test]
@@ -342,8 +364,8 @@ describe('Invoice', () => {
 });
 "#;
         let result = extract_file_details(content, Path::new("tests/billing.test.ts"));
-        assert!(result.comments.iter().any(|c| c.contains("[TODO]")));
-        assert!(result.comments.iter().any(|c| c.contains("[NOTE]")));
+        assert!(result.comments.iter().any(|c| c.tag == "TODO"));
+        assert!(result.comments.iter().any(|c| c.tag == "NOTE"));
     }
 }
 
