@@ -9,8 +9,10 @@ use crate::init::scan::DomainInfo;
 // ── Regex patterns for candidate detection ─────────────────────────
 
 /// Patterns in file paths or function names suggesting an exception.
+/// Uses word boundaries around `migration` to avoid matching standard framework
+/// commands like `squashmigrations`, `makemigrations`, `showmigrations`.
 static RE_EXCEPTION_NAMING: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)(legacy|compat|override|workaround|migration|deprecated|old_|_old|_v1\b|v1_)")
+    Regex::new(r"(?i)(legacy|compat|override|workaround|\bmigration\b|deprecated|old_|_old|_v1\b|v1_)")
         .unwrap()
 });
 

@@ -127,6 +127,13 @@ pub fn discover_structure(root: &Path) -> Result<(Vec<PathBuf>, DomainFileMap)> 
         let path = entry.path().to_path_buf();
         all_files.push(path.clone());
 
+        // Skip files under test directories for domain discovery.
+        // Test fixtures (e.g. tests/admin_scripts/complex_app/models/foo.py)
+        // should not be promoted to domains — they are not real project components.
+        if is_in_test_directory(&path, root) {
+            continue;
+        }
+
         // Try app-directory detection first (accounts/views.py → "accounts").
         // This must run before DOMAIN_PARENT_DIRS to avoid "api" being treated
         // as a parent dir and extracting "views" as the domain.
@@ -669,6 +676,35 @@ fn merge_loose_files_into_domains(
     }
 }
 
+/// Check if a file is inside a test directory (relative to project root).
+///
+/// Matches files under directories named `tests/`, `test/`, `__tests__/`, or `spec/`
+/// at any depth in the path. These files are collected for analysis (imports, TODOs)
+/// but excluded from domain discovery to avoid test fixtures polluting the domain list.
+///
+/// Examples:
+/// - `tests/admin_scripts/complex_app/models/foo.py` → true
+/// - `src/__tests__/billing.test.ts` → true
+/// - `accounts/tests/test_views.py` → true
+/// - `accounts/views.py` → false
+fn is_in_test_directory(path: &Path, root: &Path) -> bool {
+    let rel = match path.strip_prefix(root) {
+        Ok(r) => r,
+        Err(_) => return false,
+    };
+
+    for component in rel.components() {
+        if let Some(name) = component.as_os_str().to_str() {
+            match name {
+                "tests" | "test" | "__tests__" | "spec" => return true,
+                _ => {}
+            }
+        }
+    }
+
+    false
+}
+
 pub(crate) fn normalize_domain_name(name: &str) -> String {
     let lower = name
         .to_lowercase()
@@ -1114,6 +1150,77 @@ mod tests {
         assert!(
             !sub_pkgs.contains_key("test"),
             "Infra dir 'test' should be excluded from sub-packages"
+        );
+    }
+
+    // ─── is_in_test_directory ───
+
+    #[test]
+    fn test_dir_detected_at_root() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        let path = root.join("tests/admin_scripts/complex_app/models/foo.py");
+        assert!(is_in_test_directory(&path, root));
+    }
+
+    #[test]
+    fn test_dir_detected_nested() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        let path = root.join("accounts/tests/test_views.py");
+        assert!(is_in_test_directory(&path, root));
+    }
+
+    #[test]
+    fn dunder_tests_detected() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        let path = root.join("src/__tests__/billing.test.ts");
+        assert!(is_in_test_directory(&path, root));
+    }
+
+    #[test]
+    fn spec_dir_detected() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        let path = root.join("spec/models/invoice_spec.rb");
+        assert!(is_in_test_directory(&path, root));
+    }
+
+    #[test]
+    fn non_test_file_not_flagged() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+        let path = root.join("accounts/views.py");
+        assert!(!is_in_test_directory(&path, root));
+    }
+
+    #[test]
+    fn test_fixtures_excluded_from_domain_discovery() {
+        let dir = TempDir::new().unwrap();
+        let root = dir.path();
+
+        // Create a test fixture app: tests/admin_scripts/complex_app/models/foo.py
+        let fixture_dir = root.join("tests/admin_scripts/complex_app/models");
+        fs::create_dir_all(&fixture_dir).unwrap();
+        fs::write(fixture_dir.join("foo.py"), "class Foo: pass").unwrap();
+
+        // Create a real domain: src/services/billing/invoice.ts
+        let billing_dir = root.join("src/services/billing");
+        fs::create_dir_all(&billing_dir).unwrap();
+        fs::write(billing_dir.join("invoice.ts"), "export class Invoice {}").unwrap();
+
+        let (_files, domains) = discover_structure(root).unwrap();
+
+        assert!(
+            !domains.contains_key("foo"),
+            "Test fixture 'foo' should NOT be a domain, found: {:?}",
+            domains.keys().collect::<Vec<_>>()
+        );
+        assert!(
+            domains.contains_key("billing"),
+            "Real domain 'billing' should still be detected, found: {:?}",
+            domains.keys().collect::<Vec<_>>()
         );
     }
 

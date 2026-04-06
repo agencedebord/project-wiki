@@ -64,6 +64,53 @@ fn test_heuristic_exception_legacy_naming() {
 }
 
 #[test]
+fn test_heuristic_exception_does_not_match_standard_migration_commands() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let content = "line\n".repeat(60);
+
+    // Standard Django management commands should NOT be flagged as exceptions
+    for name in &[
+        "squashmigrations.py",
+        "makemigrations.py",
+        "showmigrations.py",
+        "optimizemigration.py",
+    ] {
+        let file_path = dir.path().join(name);
+        std::fs::write(&file_path, &content).unwrap();
+
+        let domain = make_domain("core", vec![file_path.to_str().unwrap()], vec![], vec![]);
+        let mut candidates = Vec::new();
+        detect_exception_candidates(&domain, &mut candidates);
+
+        assert!(
+            candidates.is_empty(),
+            "Standard command '{}' should NOT be flagged as exception, got: {:?}",
+            name,
+            candidates.iter().map(|c| &c.text).collect::<Vec<_>>()
+        );
+    }
+}
+
+#[test]
+fn test_heuristic_exception_still_matches_standalone_migration() {
+    // A file literally named "migration.py" should still match
+    let dir = tempfile::TempDir::new().unwrap();
+    let content = "line\n".repeat(60);
+    let file_path = dir.path().join("migration.py");
+    std::fs::write(&file_path, &content).unwrap();
+
+    let domain = make_domain("core", vec![file_path.to_str().unwrap()], vec![], vec![]);
+    let mut candidates = Vec::new();
+    detect_exception_candidates(&domain, &mut candidates);
+
+    assert_eq!(
+        candidates.len(),
+        1,
+        "Standalone 'migration.py' should be flagged as exception"
+    );
+}
+
+#[test]
 fn test_heuristic_exception_compat_naming() {
     let dir = tempfile::TempDir::new().unwrap();
     let file_path = dir.path().join("compat_handler.ts");
