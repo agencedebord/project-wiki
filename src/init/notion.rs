@@ -600,7 +600,7 @@ async fn fetch_ticket_details(
             let _permit = semaphore
                 .acquire()
                 .await
-                .context("semaphore closed unexpectedly")?;
+                .expect("semaphore closed unexpectedly");
 
             let mut enriched_ticket = ticket.clone();
 
