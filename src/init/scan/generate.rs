@@ -315,7 +315,12 @@ pub fn generate_needs_review(domains: &[DomainInfo], lang: &str) -> String {
             .collect();
 
         if !items.is_empty() {
-            sections.push(format!("## {} ({})\n\n{}", tag, items.len(), items.join("\n")));
+            sections.push(format!(
+                "## {} ({})\n\n{}",
+                tag,
+                items.len(),
+                items.join("\n")
+            ));
         }
     }
 

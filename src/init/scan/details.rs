@@ -345,10 +345,12 @@ app.post('/payments', handler);
         assert!(result.comments.iter().any(|c| c.tag == "FIXME"));
         assert!(result.comments.iter().any(|c| c.tag == "NOTE"));
         // Verify file path is captured
-        assert!(result
-            .comments
-            .iter()
-            .all(|c| c.file_path == "src/billing/invoice.ts"));
+        assert!(
+            result
+                .comments
+                .iter()
+                .all(|c| c.file_path == "src/billing/invoice.ts")
+        );
     }
 
     #[test]

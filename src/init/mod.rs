@@ -256,10 +256,7 @@ fn render_tickets_section(tickets: &[notion::NotionTicket], lang: &str) -> Strin
     if tickets.is_empty() {
         return String::new();
     }
-    let mut out = format!(
-        "\n## {}\n\n",
-        crate::i18n::t("notion_tickets", lang)
-    );
+    let mut out = format!("\n## {}\n\n", crate::i18n::t("notion_tickets", lang));
     for ticket in tickets {
         let status = ticket.status.as_deref().unwrap_or("\u{2014}");
         out.push_str(&format!(
