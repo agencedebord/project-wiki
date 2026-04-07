@@ -6,15 +6,19 @@ use std::collections::{HashMap, HashSet, VecDeque};
 /// If so, the direct edge is redundant and is removed.
 ///
 /// Handles cycles correctly by tracking visited nodes during BFS.
+/// Deterministic: nodes and neighbors are sorted before iteration, so the same
+/// logical graph always produces the same reduction regardless of HashMap ordering.
 /// Time complexity: O(V × E) — trivially fast for typical domain graphs (~20 nodes).
 pub fn transitive_reduce(adj: &mut HashMap<String, HashSet<String>>) {
-    let nodes: Vec<String> = adj.keys().cloned().collect();
+    let mut nodes: Vec<String> = adj.keys().cloned().collect();
+    nodes.sort();
 
     for u in &nodes {
-        let neighbors: Vec<String> = adj
+        let mut neighbors: Vec<String> = adj
             .get(u)
             .map(|s| s.iter().cloned().collect())
             .unwrap_or_default();
+        neighbors.sort();
 
         for v in &neighbors {
             // Check if v is reachable from u via a path of length ≥ 2
@@ -104,20 +108,21 @@ mod tests {
     }
 
     #[test]
-    fn cycle_with_shared_target_reduces() {
+    fn cycle_with_shared_target_reduces_deterministically() {
         // A→B, B→A (cycle), A→C, B→C
-        // Both A→C and B→C are individually redundant (via the other + cycle).
-        // The reduction removes exactly one of them (order-dependent).
-        // The cycle edges A→B and B→A must always remain.
+        // With sorted iteration (A before B), A→C is processed first and
+        // found redundant via A→B→C. Then B→C is no longer redundant
+        // (A→C was already removed). Result is deterministic: A→C removed.
         let mut g = make_graph(&[("A", "B"), ("B", "A"), ("A", "C"), ("B", "C")]);
         transitive_reduce(&mut g);
 
         assert!(g["A"].contains("B"), "A→B should remain");
         assert!(g["B"].contains("A"), "B→A should remain (cycle)");
-        // Exactly one of A→C or B→C should be removed
-        let a_to_c = g.get("A").map(|s| s.contains("C")).unwrap_or(false);
-        let b_to_c = g.get("B").map(|s| s.contains("C")).unwrap_or(false);
-        assert!(a_to_c || b_to_c, "At least one path to C must remain");
+        assert!(
+            !g["A"].contains("C"),
+            "A→C should be removed (redundant via A→B→C)"
+        );
+        assert!(g["B"].contains("C"), "B→C should remain");
         assert_eq!(edge_count(&g), 3, "One edge should be removed");
     }
 
@@ -145,6 +150,45 @@ mod tests {
         let mut g = make_graph(&[("A", "B"), ("B", "C")]);
         transitive_reduce(&mut g);
         assert_eq!(edge_count(&g), 2);
+    }
+
+    #[test]
+    fn deterministic_reduction_across_insertion_orders() {
+        // Same logical graph built with different insertion orders must always
+        // produce the same reduced result.
+        let edge_sets: Vec<Vec<(&str, &str)>> = vec![
+            vec![("A", "B"), ("B", "A"), ("A", "C"), ("B", "C")],
+            vec![("B", "C"), ("A", "C"), ("B", "A"), ("A", "B")],
+            vec![("A", "C"), ("B", "A"), ("A", "B"), ("B", "C")],
+            vec![("B", "A"), ("B", "C"), ("A", "B"), ("A", "C")],
+        ];
+
+        let mut results: Vec<Vec<(String, Vec<String>)>> = Vec::new();
+
+        for edges in &edge_sets {
+            let mut g = make_graph(edges);
+            transitive_reduce(&mut g);
+
+            // Normalize to sorted vec for comparison
+            let mut sorted: Vec<(String, Vec<String>)> = g
+                .into_iter()
+                .map(|(k, v)| {
+                    let mut vs: Vec<String> = v.into_iter().collect();
+                    vs.sort();
+                    (k, vs)
+                })
+                .collect();
+            sorted.sort_by(|a, b| a.0.cmp(&b.0));
+            results.push(sorted);
+        }
+
+        for (i, result) in results.iter().enumerate().skip(1) {
+            assert_eq!(
+                &results[0], result,
+                "Insertion order {} produced different result than order 0",
+                i
+            );
+        }
     }
 
     #[test]

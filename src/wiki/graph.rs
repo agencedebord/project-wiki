@@ -135,11 +135,15 @@ pub fn run() -> Result<()> {
     let mut mermaid_lines: Vec<String> = Vec::new();
 
     // Track which domains have been declared with their label (bracket notation)
-    let mut declared: std::collections::HashSet<String> = std::collections::HashSet::new();
+    let mut declared: HashSet<String> = HashSet::new();
 
-    for (source, targets) in &dependency_map {
+    let mut sorted_sources: Vec<&String> = dependency_map.keys().collect();
+    sorted_sources.sort();
+
+    for source in &sorted_sources {
+        let targets = &dependency_map[*source];
         // Declare source node with label on first occurrence
-        if declared.insert(source.clone()) {
+        if declared.insert((*source).clone()) {
             mermaid_lines.push(format!("    {}", mermaid_node(source)));
         }
         for (target, label) in targets {
@@ -165,7 +169,7 @@ pub fn run() -> Result<()> {
     }
 
     // Add isolated domains (no deps, not depended upon)
-    let connected: std::collections::HashSet<&str> = dependency_map
+    let connected: HashSet<&str> = dependency_map
         .iter()
         .flat_map(|(source, targets)| {
             let mut names = vec![source.as_str()];
@@ -189,8 +193,11 @@ pub fn run() -> Result<()> {
     };
 
     let mut style_lines: Vec<String> = Vec::new();
-    for (domain, count) in &connection_count {
-        if *count >= threshold && *count > 1 {
+    let mut sorted_domains: Vec<&String> = connection_count.keys().collect();
+    sorted_domains.sort();
+    for domain in &sorted_domains {
+        let count = connection_count[*domain];
+        if count >= threshold && count > 1 {
             style_lines.push(format!(
                 "    style {} fill:#e74c3c,color:#fff",
                 mermaid_id(domain)
