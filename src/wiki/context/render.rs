@@ -163,7 +163,11 @@ fn compact_summary_fallback(note: &WikiNote, domain: &str) -> String {
 
 pub(super) fn truncate_output(result: String) -> String {
     if result.len() > MAX_CONTEXT_LEN {
-        let boundary = result.floor_char_boundary(MAX_CONTEXT_LEN - 20);
+        // Find a valid char boundary for truncation (MSRV-compatible fallback)
+        let mut boundary = MAX_CONTEXT_LEN - 20;
+        while boundary > 0 && !result.is_char_boundary(boundary) {
+            boundary -= 1;
+        }
         let mut truncated = result[..boundary].to_string();
         truncated.push_str("\n[... truncated]");
         truncated

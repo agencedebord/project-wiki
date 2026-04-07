@@ -318,7 +318,8 @@ fn update_cross_references(content: &str, old: &str, new: &str) -> String {
     let pattern = format!(r"(?m)^domain:\s+{}$", regex::escape(old));
     let re = Regex::new(&pattern).expect("invalid domain regex");
     let new_domain_ref = format!("domain: {}", new);
-    re.replace_all(&result, new_domain_ref.as_str()).into_owned()
+    re.replace_all(&result, new_domain_ref.as_str())
+        .into_owned()
 }
 
 fn import_folder_in(wiki_dir: &Path, folder: &str, domain: Option<&str>) -> Result<()> {
@@ -759,9 +760,13 @@ mod tests {
     #[test]
     fn update_cross_references_does_not_match_partial_domain() {
         // Renaming `billing` must not affect `billing-extra` in paths or frontmatter
-        let content = "---\ndomain: billing-extra\n---\nSee [link](domains/billing-extra/_overview.md)\n";
+        let content =
+            "---\ndomain: billing-extra\n---\nSee [link](domains/billing-extra/_overview.md)\n";
         let result = update_cross_references(content, "billing", "payments");
-        assert_eq!(result, content, "partial domain name should not be replaced");
+        assert_eq!(
+            result, content,
+            "partial domain name should not be replaced"
+        );
     }
 
     #[test]

@@ -243,9 +243,8 @@ fn detect_app_directories(root: &Path) -> HashMap<String, AppDirInfo> {
                         // Recursive check: does this sub-domain itself qualify for splitting?
                         let nested_packages = detect_sub_packages(&sub_path);
                         let nested_files = count_recursive_source_files(&sub_path);
-                        let nested_split =
-                            nested_packages.len() >= LARGE_APP_SUBPACKAGE_THRESHOLD
-                                && nested_files >= LARGE_APP_FILE_THRESHOLD;
+                        let nested_split = nested_packages.len() >= LARGE_APP_SUBPACKAGE_THRESHOLD
+                            && nested_files >= LARGE_APP_FILE_THRESHOLD;
 
                         (
                             sub_name,
@@ -694,11 +693,8 @@ fn is_in_test_directory(path: &Path, root: &Path) -> bool {
     };
 
     for component in rel.components() {
-        if let Some(name) = component.as_os_str().to_str() {
-            match name {
-                "tests" | "test" | "__tests__" | "spec" => return true,
-                _ => {}
-            }
+        if let Some("tests" | "test" | "__tests__" | "spec") = component.as_os_str().to_str() {
+            return true;
         }
     }
 
@@ -1285,7 +1281,13 @@ mod tests {
         let (_files, domains) = discover_structure(dir.path()).unwrap();
 
         // contrib should be recursively split into "contrib-auth", "contrib-admin", etc.
-        for sub in &["contrib-auth", "contrib-admin", "contrib-sessions", "contrib-messages", "contrib-staticfiles"] {
+        for sub in &[
+            "contrib-auth",
+            "contrib-admin",
+            "contrib-sessions",
+            "contrib-messages",
+            "contrib-staticfiles",
+        ] {
             assert!(
                 domains.contains_key(*sub),
                 "Expected nested sub-domain '{}', found: {:?}",

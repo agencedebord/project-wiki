@@ -12,8 +12,10 @@ use crate::init::scan::DomainInfo;
 /// Uses word boundaries around `migration` to avoid matching standard framework
 /// commands like `squashmigrations`, `makemigrations`, `showmigrations`.
 static RE_EXCEPTION_NAMING: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)(legacy|compat|override|workaround|\bmigration\b|deprecated|old_|_old|_v1\b|v1_)")
-        .unwrap()
+    Regex::new(
+        r"(?i)(legacy|compat|override|workaround|\bmigration\b|deprecated|old_|_old|_v1\b|v1_)",
+    )
+    .unwrap()
 });
 
 /// Patterns in comments suggesting a deliberate decision.
@@ -260,7 +262,11 @@ pub(super) fn truncate_text(text: &str, max_len: usize) -> String {
     if text.len() <= max_len {
         text.to_string()
     } else {
-        let boundary = text.floor_char_boundary(max_len - 3);
+        // Find a valid char boundary for truncation (MSRV-compatible fallback)
+        let mut boundary = max_len - 3;
+        while boundary > 0 && !text.is_char_boundary(boundary) {
+            boundary -= 1;
+        }
         format!("{}...", &text[..boundary])
     }
 }

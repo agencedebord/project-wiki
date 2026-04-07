@@ -47,10 +47,8 @@ fn is_reachable_without_direct(
 
     // Start BFS from all neighbors of source except target
     for neighbor in neighbors {
-        if neighbor != target {
-            if visited.insert(neighbor.as_str()) {
-                queue.push_back(neighbor.as_str());
-            }
+        if neighbor != target && visited.insert(neighbor.as_str()) {
+            queue.push_back(neighbor.as_str());
         }
     }
 
@@ -77,9 +75,7 @@ mod tests {
     fn make_graph(edges: &[(&str, &str)]) -> HashMap<String, HashSet<String>> {
         let mut adj: HashMap<String, HashSet<String>> = HashMap::new();
         for (u, v) in edges {
-            adj.entry(u.to_string())
-                .or_default()
-                .insert(v.to_string());
+            adj.entry(u.to_string()).or_default().insert(v.to_string());
             // Ensure target node exists in the map
             adj.entry(v.to_string()).or_default();
         }
@@ -121,10 +117,7 @@ mod tests {
         // Exactly one of A→C or B→C should be removed
         let a_to_c = g.get("A").map(|s| s.contains("C")).unwrap_or(false);
         let b_to_c = g.get("B").map(|s| s.contains("C")).unwrap_or(false);
-        assert!(
-            a_to_c || b_to_c,
-            "At least one path to C must remain"
-        );
+        assert!(a_to_c || b_to_c, "At least one path to C must remain");
         assert_eq!(edge_count(&g), 3, "One edge should be removed");
     }
 
