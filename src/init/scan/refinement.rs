@@ -19,6 +19,30 @@ const MIN_PREFIX_LENGTH: usize = 3;
 /// Minimum files sharing a prefix to form a cluster.
 const MIN_PREFIX_CLUSTER_SIZE: usize = 3;
 
+/// Maximum iterations of the split loop to prevent infinite recursion.
+/// In practice, 3 rounds is enough: e.g., frontend → frontend-src → frontend-src-components → done.
+const MAX_REFINEMENT_ROUNDS: usize = 5;
+
+/// Segments in domain names that are structural noise and should be stripped
+/// when simplifying names after refinement.
+/// These are directory names that organize code by type (not by domain).
+const NOISE_SEGMENTS: &[&str] = &[
+    "src",
+    "components",
+    "lib",
+    "app",
+    "pages",
+    "modules",
+    "features",
+    "packages",
+    "core",
+    "internal",
+    "public",
+    "private",
+    "(private)",
+    "(public)",
+];
+
 // ─── Public entry point ───
 
 /// Refine oversized domains by splitting them into meaningful sub-domains.
@@ -34,39 +58,53 @@ const MIN_PREFIX_CLUSTER_SIZE: usize = 3;
 /// semantic name across formerly separate domains (e.g., "document" files from
 /// both "components" and "hooks" merge into a single "document" domain).
 pub(crate) fn refine_domains(domains: DomainFileMap) -> DomainFileMap {
-    // Phase 1: Split oversized domains
-    let mut refined = DomainFileMap::new();
     // Maps split product domain name → its cluster suffix (the semantic part after the parent prefix).
     // We track this explicitly because the suffix itself can contain hyphens
     // (e.g., "components-real-estate-file" has suffix "real-estate-file", not "file").
     let mut split_suffixes: HashMap<String, String> = HashMap::new();
 
-    for (name, files) in domains {
-        let source_count = count_source_files(&files);
-        if source_count <= REFINEMENT_THRESHOLD {
-            refined.insert(name, files);
-            continue;
+    // Phase 1: Iteratively split oversized domains until convergence.
+    // A single pass may produce sub-domains that are themselves oversized
+    // (e.g., frontend → frontend-src still has 170+ files), so we iterate.
+    let mut refined = domains;
+    for _round in 0..MAX_REFINEMENT_ROUNDS {
+        let mut next = DomainFileMap::new();
+        let mut any_split = false;
+
+        for (name, files) in refined {
+            let source_count = count_source_files(&files);
+            if source_count <= REFINEMENT_THRESHOLD {
+                next.insert(name, files);
+                continue;
+            }
+
+            let (split, suffixes) = split_domain(&name, files);
+            if split.len() > 1 {
+                any_split = true;
+                let sub_names: Vec<&String> = split.keys().collect();
+                ui::verbose(&format!(
+                    "refined {:?} ({} files) into {} sub-domains: {:?}",
+                    name, source_count, split.len(), sub_names
+                ));
+            }
+            split_suffixes.extend(suffixes);
+            next.extend(split);
         }
 
-        let (split, suffixes) = split_domain(&name, files);
-        if split.len() > 1 {
-            let sub_names: Vec<&String> = split.keys().collect();
-            ui::verbose(&format!(
-                "refined {:?} ({} files) into {} sub-domains: {:?}",
-                name,
-                source_count,
-                split.len(),
-                sub_names
-            ));
+        refined = next;
+        if !any_split {
+            break;
         }
-        split_suffixes.extend(suffixes);
-        refined.extend(split);
     }
 
     // Phase 2: Cross-directory merge
     if !split_suffixes.is_empty() {
         merge_cross_domain_clusters(&mut refined, &split_suffixes);
     }
+
+    // Phase 3: Simplify domain names by removing structural noise segments
+    // e.g., "frontend-src-components-forms-step" → "frontend-forms-step"
+    simplify_domain_names(&mut refined);
 
     refined
 }
@@ -394,6 +432,90 @@ fn merge_cross_domain_clusters(
             domains.entry(target).or_default().extend(merged_files);
         }
     }
+}
+
+// ─── Name simplification ───
+
+/// Simplify domain names by removing structural noise segments.
+///
+/// "frontend-src-components-forms-step" → "frontend-forms-step"
+/// "frontend-src-api" → "frontend-api"
+/// "frontend-src-components-dashboard" → "frontend-dashboard"
+///
+/// Handles collisions: if simplification would create a duplicate name,
+/// progressively keeps more segments until the name is unique.
+fn simplify_domain_names(domains: &mut DomainFileMap) {
+    let original_names: Vec<String> = domains.keys().cloned().collect();
+    let mut renames: Vec<(String, String)> = Vec::new();
+
+    for name in &original_names {
+        let simplified = simplify_name(name);
+        if simplified != *name {
+            renames.push((name.clone(), simplified));
+        }
+    }
+
+    // Resolve collisions: if two names simplify to the same thing,
+    // keep their original names instead
+    let mut target_counts: HashMap<String, usize> = HashMap::new();
+    for (_, target) in &renames {
+        *target_counts.entry(target.clone()).or_default() += 1;
+    }
+    // Also check collision with names that weren't renamed
+    let renamed_originals: HashSet<&String> = renames.iter().map(|(orig, _)| orig).collect();
+    for name in &original_names {
+        if !renamed_originals.contains(name) {
+            *target_counts.entry(name.clone()).or_default() += 1;
+        }
+    }
+
+    for (original, target) in renames {
+        if target_counts[&target] > 1 {
+            // Collision — keep original name
+            continue;
+        }
+        if let Some(files) = domains.remove(&original) {
+            domains.insert(target, files);
+        }
+    }
+}
+
+/// Remove noise segments from a domain name.
+///
+/// Splits on hyphens, drops segments that are in NOISE_SEGMENTS,
+/// and rejoins. Preserves at least the first and last segment
+/// to maintain meaning.
+fn simplify_name(name: &str) -> String {
+    let segments: Vec<&str> = name.split('-').collect();
+    if segments.len() <= 2 {
+        return name.to_string();
+    }
+
+    // Keep first segment (top-level context, e.g., "frontend")
+    // and filter noise from the middle, always keep the last segment
+    let first = segments[0];
+    let last = segments[segments.len() - 1];
+    let middle: Vec<&str> = segments[1..segments.len() - 1]
+        .iter()
+        .filter(|s| !NOISE_SEGMENTS.contains(s))
+        .copied()
+        .collect();
+
+    let mut result = vec![first];
+    result.extend(middle);
+    // Avoid duplicating the last segment if it's the same as what we already have
+    if result.last().copied() != Some(last) {
+        result.push(last);
+    }
+
+    let simplified = result.join("-");
+
+    // If we stripped everything except first, return "first-last"
+    if simplified == first && first != last {
+        return format!("{}-{}", first, last);
+    }
+
+    simplified
 }
 
 // ─── Helpers ───
@@ -850,6 +972,75 @@ mod tests {
         assert!(
             !refined.contains_key("file"),
             "'file' should not exist — the full suffix is 'real-estate-file'"
+        );
+    }
+
+    // ─── simplify_name ───
+
+    #[test]
+    fn simplify_strips_noise_segments() {
+        assert_eq!(
+            simplify_name("frontend-src-components-forms-step"),
+            "frontend-forms-step"
+        );
+    }
+
+    #[test]
+    fn simplify_strips_src_and_components() {
+        assert_eq!(
+            simplify_name("frontend-src-components-dashboard"),
+            "frontend-dashboard"
+        );
+    }
+
+    #[test]
+    fn simplify_preserves_short_names() {
+        assert_eq!(simplify_name("frontend-api"), "frontend-api");
+    }
+
+    #[test]
+    fn simplify_preserves_single_segment() {
+        assert_eq!(simplify_name("billing"), "billing");
+    }
+
+    #[test]
+    fn simplify_strips_src_only() {
+        assert_eq!(simplify_name("frontend-src-api"), "frontend-api");
+    }
+
+    #[test]
+    fn simplify_keeps_meaningful_middle() {
+        assert_eq!(
+            simplify_name("frontend-src-forms-realestatefile"),
+            "frontend-forms-realestatefile"
+        );
+    }
+
+    #[test]
+    fn simplify_domain_names_handles_collision() {
+        let mut domains = DomainFileMap::new();
+        // Two domains that would both simplify to "frontend-dashboard"
+        domains.insert(
+            "frontend-src-components-dashboard".into(),
+            vec![PathBuf::from("a.tsx")],
+        );
+        domains.insert(
+            "frontend-src-app-dashboard".into(),
+            vec![PathBuf::from("b.tsx")],
+        );
+
+        simplify_domain_names(&mut domains);
+
+        // Both should keep their original names due to collision
+        assert!(
+            domains.contains_key("frontend-src-components-dashboard"),
+            "Should keep original name due to collision, found: {:?}",
+            domains.keys().collect::<Vec<_>>()
+        );
+        assert!(
+            domains.contains_key("frontend-src-app-dashboard"),
+            "Should keep original name due to collision, found: {:?}",
+            domains.keys().collect::<Vec<_>>()
         );
     }
 
