@@ -2,6 +2,7 @@ mod dependencies;
 mod details;
 mod generate;
 mod imports;
+mod refinement;
 pub mod structure;
 
 use std::collections::HashMap;
@@ -128,6 +129,10 @@ pub fn run() -> Result<ScanResult> {
     // Pass 1: Structure discovery
     ui::step("Pass 1 — discovering project structure...");
     let (all_files, domains_map) = structure::discover_structure(&project_root)?;
+
+    // Pass 1.5: Refine oversized domains by splitting them into meaningful sub-domains
+    let domains_map = refinement::refine_domains(domains_map);
+
     let total_files = all_files.len();
 
     let languages = structure::detect_languages(&all_files);
